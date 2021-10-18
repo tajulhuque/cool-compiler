@@ -1,0 +1,6 @@
+version: "1.0"
+services:
+  coolwork:
+    build: .
+    volumes:
+      - ./workspace:/usr/class/workspace/
