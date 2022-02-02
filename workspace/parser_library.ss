@@ -13,6 +13,7 @@
 ;;  (alt-test))
 
 
+
 (def (string-parse-test)
   (let* ((parser (parse-string "coolness"))
          (input (string->list "coolness"))
@@ -39,6 +40,17 @@
       ((parse-fail msg) (displayln msg) '())
       (else (displayln "??") '()))))
 
+
+(def (parse-letter)
+  (def parser
+    (parse-any-char (string->list "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnophijklmnopqrstuvwxyz")))
+  parser)
+
+
+(def (parse-any-char chars)
+  (def parser
+      (parse-any-of (map parse-char chars)))
+  parser)
 
 (def (parse-string str)
   (def parser
