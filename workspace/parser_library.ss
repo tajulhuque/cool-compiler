@@ -19,7 +19,7 @@
   (let (parse-result (parser stream))
     ;;(displayln parser)
     (match parse-result
-      ((parse-stream parse-tree input-stream) (displayln parse-tree) parse-tree)
+      ((parse-stream parse-tree input-stream) (displayln "Success! Parse Tree: ") (displayln parse-tree) parse-tree)
       ((parse-fail msg) (displayln msg) '())
       (else (displayln "??") '()))))
 
@@ -40,7 +40,7 @@
       ((parse-stream parse-tree input-stream)
        (if (equal? (car input-stream) char)
          (make-parse-stream (cons char parse-tree) (cdr input-stream))
-         (make-parse-fail (string-append "expected " (string char)))))
+         (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char)))))
       (else (make-parse-fail ""))))
   parser)
 
@@ -68,6 +68,8 @@
         ((parse-stream parse-tree input-stream) (parser2 first-result))
         (else first-result))))
   parser)
+
+;; (def (parser-alternate parser1 parser2)
 
 ;; todo: need parser-alt , to succeed if one of the two parsers succeed
 ;; todo need parse-any, to succeed if any of a list of parsers succeed.
