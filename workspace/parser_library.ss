@@ -9,11 +9,27 @@
 (defstruct if-exp (test-exp true-exp false-exp))
 
 (def (main . args)
+  (string-parse-test))
+;;  (alt-test))
+
+
+(def (string-parse-test)
   (let* ((parser (parse-string "coolness"))
          (input (string->list "coolness"))
          (parse-tree '())
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
+
+(def (alt-test)
+  (let* ((parser (parser-compose-alternate
+                  (parse-string "coolness")
+                  (parse-string "taj")))
+         (input (string->list "taj"))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+  (run-parser parser parse-stream)))
+
+
 
 (def (run-parser parser stream)
   (let (parse-result (parser stream))
@@ -23,10 +39,11 @@
       ((parse-fail msg) (displayln msg) '())
       (else (displayln "??") '()))))
 
+
 (def (parse-string str)
   (def parser
     (let (str-chars (string->list str))
-      (parser-combine (map parse-char str-chars))))
+      (parse-pipeline (map parse-char str-chars))))
   parser)
 
 (def (parse-char char)
@@ -56,12 +73,18 @@
 ;; and then use that in terms of parsing?
 ;; Going with the coupled version for now...
 
-(def (parser-combine parsers)
+(def (parse-pipeline parsers)
+  (parser-combine parsers parser-compose-follow))
+
+(def (parse-any-of parsers)
+  (parser-combine parsers parser-compose-alternate))
+
+(def (parser-combine parsers composer)
   (def combined-parser
-    (fold parser-compose (lambda (x) x) (reverse parsers)))
+    (fold composer (lambda (x) x) (reverse parsers)))
   combined-parser)
 
-(def (parser-compose parser1 parser2)
+(def (parser-compose-follow parser1 parser2)
   (def (parser stream)
     (let (first-result (parser1 stream))
       (match first-result
@@ -69,7 +92,15 @@
         (else first-result))))
   parser)
 
-;; (def (parser-alternate parser1 parser2)
+(def (parser-compose-alternate parser1 parser2)
+  (def (parser stream)
+    (let (first-result (parser1 stream))
+      (if (parse-stream? first-result)
+        first-result
+        (parser2 stream))))
+  parser)
+
+
 
 ;; todo: need parser-alt , to succeed if one of the two parsers succeed
 ;; todo need parse-any, to succeed if any of a list of parsers succeed.
