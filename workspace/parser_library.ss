@@ -9,9 +9,7 @@
 (defstruct if-exp (test-exp true-exp false-exp))
 
 (def (main . args)
-  (string-parse-test))
-;;  (alt-test))
-
+  (repeat-test))
 
 
 (def (string-parse-test)
@@ -28,8 +26,14 @@
          (input (string->list "taj"))
          (parse-tree '())
          (parse-stream (make-parse-stream parse-tree input)))
-  (run-parser parser parse-stream)))
+    (run-parser parser parse-stream)))
 
+(def (repeat-test)
+  (let* ((parser (parser-repeat (parse-letter)))
+         (input (string->list "xcvsdfaasdfwsdfsdfs xssdf"))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
 
 
 (def (run-parser parser stream)
@@ -39,7 +43,6 @@
       ((parse-stream parse-tree input-stream) (displayln "Success! Parse Tree: ") (displayln parse-tree) parse-tree)
       ((parse-fail msg) (displayln msg) '())
       (else (displayln "??") '()))))
-
 
 (def (parse-letter)
   (def parser
@@ -91,10 +94,46 @@
 (def (parse-any-of parsers)
   (parser-combine parsers parser-compose-alternate))
 
+;; todo: parser-combine need to make safe if passed 1 parser?
 (def (parser-combine parsers composer)
   (def combined-parser
-    (fold composer (lambda (x) x) (reverse parsers)))
+    (let (reversed-parsers (reverse parsers))
+      (fold composer (car reversed-parsers) (cdr reversed-parsers))))
   combined-parser)
+
+;; parser-repeat - need to make parser parse
+;; over and over again until it finally fails,
+;; basically greedy-parse as much as it can.
+;; Should this be in the combinater style?
+;; Takes a parser and produces another parser?
+;; Probaby yes.
+;; Basically, need to run the supplied parser once, if that fails, return parse-fail.
+;; Otherwise, keep going as long as you can, returning until failure
+;; but in the "keep going phase" you don't return failure, you only stop at failure
+(def (parser-repeat parser)
+  (def (repeat-parser stream)
+
+    (def (repeat-phase repeat-phase-stream)
+      (let (repeat-phase-parse-result (parser repeat-phase-stream))
+        (if (parse-fail? repeat-phase-parse-result)
+          repeat-phase-stream
+          (let (repeat-phase-result-input (parse-stream-input-stream repeat-phase-parse-result))
+            (if (null? repeat-phase-result-input)
+              repeat-phase-parse-result
+              (repeat-phase repeat-phase-parse-result))))))
+
+
+    (let (parse-result (parser stream))
+      (if (parse-stream? parse-result)
+        (repeat-phase parse-result)
+        (parse-result))))
+  repeat-parser)
+
+;; todo: define a more-input? function
+;; which would be helpfull to cleanup the above function
+;; a bit in the area where it has some extra needed piece
+;; that checks if there is any more input to parse
+;; (and that might be needed again)
 
 (def (parser-compose-follow parser1 parser2)
   (def (parser stream)
