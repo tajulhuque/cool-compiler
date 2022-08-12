@@ -5,11 +5,13 @@
 (defstruct parse-fail (msg))
 
 ;; parse-to-types
+(defstruct int-literal (value))
 (defstruct binary-exp (left-exp op right-exp))
 (defstruct if-exp (test-exp true-exp false-exp))
 
 (def (main . args)
-  (repeat-test))
+  (pretty-print [(make-binary-exp 9 '+ 8) (make-int-literal 8) (make-int-literal 42)]))
+  ;;(repeat-test))
 
 
 (def (string-parse-test)
@@ -30,7 +32,7 @@
 
 (def (repeat-test)
   (let* ((parser (parser-repeat (parse-letter)))
-         (input (string->list "xcvsdfaasdfwsdfsdfs xssdf"))
+         (input (string->list "mmmgdf1123a"))
          (parse-tree '())
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
@@ -43,6 +45,18 @@
       ((parse-stream parse-tree input-stream) (displayln "Success! Parse Tree: ") (displayln parse-tree) parse-tree)
       ((parse-fail msg) (displayln msg) '())
       (else (displayln "??") '()))))
+
+;;(def (parse-integer)
+  ;;(def (parser stream)
+    ;;(let* ((digits-parser (parser-repeat (parse-digit)))
+      ;;     (digits-parse-result (digits-parser stream)))
+      ;;(match digits-parse-result
+        ;;((parse-stream parse-tree input-stream) (make-parse-stream
+          ;;                                       (cons =
+
+
+(def (parse-digit)
+  (parse-any-char (string->list "0123456789")))
 
 (def (parse-letter)
   (def parser
