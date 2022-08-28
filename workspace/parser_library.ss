@@ -1,5 +1,8 @@
 #!/usr/bin/env gxi
 
+(def (main . args)
+  (integer-parse-test))
+
 ;; parse "stream": tree we are building up along with frontier of unparsed characters
 (defstruct parse-stream (parse-tree input-stream))
 (defstruct parse-fail (msg))
@@ -9,10 +12,35 @@
 (defstruct binary-exp (left-exp op right-exp))
 (defstruct if-exp (test-exp true-exp false-exp))
 
-(def (main . args)
-  (pretty-print [(make-binary-exp 9 '+ 8) (make-int-literal 8) (make-int-literal 42)]))
-  ;;(repeat-test))
 
+;; Visualizers
+
+(def (print-parse-tree-stack tree-stack)
+  (displayln "----")
+  (map (lambda (elem)
+         (if (list? elem)
+           (print-parse-tree-stack elem)
+           (print-parse-tree-node elem)))
+       tree-stack)
+  (displayln "")
+  (displayln "----"))
+
+
+(def (print-parse-tree-node node)
+  (match node
+    ((int-literal value) (print (string-append "INT<" (number->string value) ">")))
+    (else (print node)))
+  (print " "))
+
+
+;; TEST Functions
+
+(def (integer-parse-test)
+  (let* ((parser (parse-integer))
+         (input (string->list "123"))
+         (parse-tree [])
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
 
 (def (string-parse-test)
   (let* ((parser (parse-string "coolness"))
@@ -37,22 +65,32 @@
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
 
+;; End Test Methods
 
+;; Parser Runner ;;;;;;;;;
+;;
 (def (run-parser parser stream)
   (let (parse-result (parser stream))
     ;;(displayln parser)
     (match parse-result
-      ((parse-stream parse-tree input-stream) (displayln "Success! Parse Tree: ") (displayln parse-tree) parse-tree)
+      ((parse-stream parse-tree input-stream) (displayln "Success! Parse Tree: ") (print-parse-tree-stack parse-tree) parse-tree)
       ((parse-fail msg) (displayln msg) '())
       (else (displayln "??") '()))))
 
-;;(def (parse-integer)
-  ;;(def (parser stream)
-    ;;(let* ((digits-parser (parser-repeat (parse-digit)))
-      ;;     (digits-parse-result (digits-parser stream)))
-      ;;(match digits-parse-result
-        ;;((parse-stream parse-tree input-stream) (make-parse-stream
-          ;;                                       (cons =
+
+;; Start Of Parser "Library" ;;;;;;;;;
+
+(def (parse-integer)
+  (def (parser stream)
+    (let* ((digits-parser (parser-repeat (parse-digit)))
+           (prepped-stream (push-parse-tree [] stream))
+           (digits-parse-result (digits-parser prepped-stream)))
+      (match digits-parse-result
+        ((parse-stream tree input) (let* ((parsed-digits-branch (car tree))
+                                          (parsed-int-literal (make-int-literal (digit-list->number parsed-digits-branch))))
+                                     (push-parse-tree parsed-int-literal (pop-parse-tree digits-parse-result))))
+        (else digits-parse-result))))
+  parser)
 
 
 (def (parse-digit)
@@ -85,7 +123,7 @@
     (match stream
       ((parse-stream parse-tree input-stream)
        (if (equal? (car input-stream) char)
-         (make-parse-stream (cons char parse-tree) (cdr input-stream))
+         (make-parse-stream (append-car char parse-tree) (cdr input-stream))
          (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char)))))
       (else (make-parse-fail ""))))
   parser)
@@ -194,6 +232,31 @@
 ;;
 
 
+;; COMPOSE CONCEPT ;;;;;;
 (def (compose f g)
   (lambda args
     (g (apply f args))))
+
+
+;; helpers ;;;;;;;;;
+
+(def (append-car x lst)
+  "append x to the car of the list"
+  (cons (append (car lst) (list x)) (cdr lst)))
+
+(def (pop-parse-tree stream)
+  "pops the parse-tree stack of the parse-stream, returns as new parse-stream"
+  (match stream
+    ((parse-stream parse-tree input-stream) (make-parse-stream (cdr parse-tree) input-stream))
+    (else nil)))
+
+(def (push-parse-tree tree stream)
+  "pushes specified tree onto parse-stream's parse-tree stack and returns as new parse-stream"
+  (match stream
+    ((parse-stream parse-tree input-stream) (make-parse-stream (cons tree parse-tree) input-stream))
+    (else nil)))
+
+(def (digit-list->number digit-list)
+  "converts a number represented by list of digit characters to the actual number value"
+  (string->number
+   (list->string digit-list)))
