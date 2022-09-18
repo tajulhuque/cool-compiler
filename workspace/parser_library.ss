@@ -1,16 +1,35 @@
 #!/usr/bin/env gxi
 
-(def (main . args)
-  (integer-parse-test))
 
-;; parse "stream": tree we are building up along with frontier of unparsed characters
+;; Main: Entry point of program ;;;;;;
+(def (main . args)
+  (binary-exp-parse-test))
+
+;; Main structures ;;;;;;;;;;;;;
+
+;; Parse "stream": tree we are building up along with frontier of unparsed characters.
+;; It feels awkward that I have parse-tree and input-stream in the same structure.
+;; Scheme does have (values) where you can return multiple results from functions,
+;; but for simplicity I want to stay away from them.  What I'm thinking to
+;; do is rename this as "parse-progress" -- I think that captures what
+;; it is all about better.  I like the word "frontier" that is used in the literature, too; the
+;; charaters that are still left to consume, so I may rename "input-stream" to char-frontier, input-frontier,
+;; or something like that.  "input-stream" might be good enough though.  But I really like parse-progress
+;; for the name of the structure
 (defstruct parse-stream (parse-tree input-stream))
+
+
+;; Structure to return when a parse fails.
+;; 9/17/22: Error reporting still needs some proving out
 (defstruct parse-fail (msg))
 
 ;; parse-to-types
+(defstruct expression (exp))
 (defstruct int-literal (value))
+(defstruct identifier (name))
 (defstruct binary-exp (left-exp op right-exp))
 (defstruct if-exp (test-exp true-exp false-exp))
+(defstruct identifier (name))
 
 
 ;; Visualizers
@@ -29,16 +48,46 @@
 (def (print-parse-tree-node node)
   (match node
     ((int-literal value) (print (string-append "INT<" (number->string value) ">")))
+    ((identifier name) (print (string-append "ID<" name ">")))
+    ((expression exp)
+     (print "EXP [" )
+     (print-parse-tree-node exp)
+     (print "]"))
     (else (print node)))
   (print " "))
 
+;; 09/18/2022: Starting to get to the point where I need to learn
+;; Gerbil/Gambit's debugging support.  Need a stacktrace at present.
 
 ;; TEST Functions
+;;
+(def (binary-exp-parse-test)
+  (let* ((parser (parse-binary-exp [#\+]))
+         (input (string->list "123+abc$"))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+
+
+(def (expression-parse-test)
+  (let* ((parser (parse-expression))
+         (input (string->list "abc123"))
+         (parse-tree '((3 2 4) 4 3))
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+(def (identifier-parse-test)
+  (let* ((parser (parse-identifier))
+         (input (string->list "_412Rerfj"))
+         (parse-tree '((3 2 4) 4 3))
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
 
 (def (integer-parse-test)
   (let* ((parser (parse-integer))
          (input (string->list "123"))
-         (parse-tree [])
+         (parse-tree '((3 2 4) 4 3))
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
 
@@ -67,31 +116,122 @@
 
 ;; End Test Methods
 
+
+;; Debugging Utilities ;;;;;;;;;;;;;;;
+(def (trace-msg msg stream)
+  (displayln msg)
+  (match stream
+    ((parse-stream tree input-stream)
+     (displayln "Tree: ")
+     (print tree)
+     (displayln "Input: ")
+     (print input-stream)
+     (displayln ""))))
+
 ;; Parser Runner ;;;;;;;;;
 ;;
 (def (run-parser parser stream)
   (let (parse-result (parser stream))
     ;;(displayln parser)
     (match parse-result
-      ((parse-stream parse-tree input-stream) (displayln "Success! Parse Tree: ") (print-parse-tree-stack parse-tree) parse-tree)
+      ((parse-stream parse-tree input-stream)
+       (displayln "SUCCESSFUL PARSE")
+       (displayln "Final Parse Progress Result: (tree, input)")
+       (displayln parse-tree)
+       (displayln input-stream)
+       (displayln "Parse Tree: ")
+       (print-parse-tree-stack parse-tree)
+       parse-tree)
       ((parse-fail msg) (displayln msg) '())
       (else (displayln "??") '()))))
 
 
 ;; Start Of Parser "Library" ;;;;;;;;;
 
-(def (parse-integer)
+;; This one is the heart of it all, and will
+;; of course evolve and grow as we add more pieces of it.
+;; Note that COOL specific stuff probably wouldn't belong in
+;; this "library" module... but abstracting out of specific
+;; vs general domain will come much later... not at that state yet.
+(def (parse-expression)
   (def (parser stream)
-    (let* ((digits-parser (parser-repeat (parse-digit)))
-           (prepped-stream (push-parse-tree [] stream))
-           (digits-parse-result (digits-parser prepped-stream)))
-      (match digits-parse-result
-        ((parse-stream tree input) (let* ((parsed-digits-branch (car tree))
-                                          (parsed-int-literal (make-int-literal (digit-list->number parsed-digits-branch))))
-                                     (push-parse-tree parsed-int-literal (pop-parse-tree digits-parse-result))))
-        (else digits-parse-result))))
+    (trace-msg ".....parse-expression" stream)
+    (parse-to-tree-node
+     (parse-any-of
+      [(parse-identifier)
+       (parse-integer)])
+     (lambda (parse-result-tree)
+       (make-expression parse-result-tree))
+     stream))
   parser)
 
+
+;; NOW with this one... the recursive definition aspect
+;; starts to unfold! Expressions referring to Expressions!
+;;We are getting deep now, mechanism of pushing, and popping
+;;to construct node on tree is really put to the test now here.
+;;We can't just do parse-tree-to-node here.
+;;There are THREE Seperate results parse results to look for here.
+;;LEFT EXP, OP, RIGHT EXP
+
+(def (parse-binary-exp operators)
+  (def (parser stream)
+    (trace-msg "..parse-binary-exp" stream)
+    (parse-to-tree-node
+     (parse-pipeline
+      [(parse-expression)
+       (parse-any-char operators)
+       (parse-expression)])
+     (lambda (operands-between-operator)
+       (make-expression operands-between-operator))
+     stream))
+  parser)
+
+
+(def (parse-identifier)
+  (def (parser stream)
+    (trace-msg "..........parse-identifier" stream)
+    (parse-to-tree-node
+     (parse-pipeline
+      [(parse-valid-identifier-non-digit-char)
+       (parser-repeat (parse-valid-identifier-char))])
+     (lambda (parse-result-tree)
+       (make-identifier (list->string parse-result-tree)))
+     stream))
+  parser)
+
+
+(def (parse-integer)
+  (def (parser stream)
+    (trace-msg "..........parse-integer" stream)
+    (parse-to-tree-node
+     (parser-repeat (parse-digit))
+     (lambda (parsed-digits-tree)
+       (make-int-literal (digit-list->number parsed-digits-tree)))
+     stream))
+  parser)
+
+
+    ;;(let* ((digits-parser (parser-repeat (parse-digit)))
+     ;;      (prepped-stream (push-parse-tree [] stream))
+      ;;     (digits-parse-result (digits-parser prepped-stream)))
+      ;;(match digits-parse-result
+;        ((parse-stream tree input) (pop-build-push digits-parse-result tree
+;;                                                   (lambda (parsed-digits-tree)
+ ;;                                                    (make-int-literal (digit-list->number parsed-digits-tree)))))
+
+
+         ;;(let* ((parsed-digits-branch (car tree))
+         ;;      (parsed-int-literal (make-int-literal (digit-list->number parsed-digits-branch))))
+         ;; (push-parse-tree parsed-int-literal (pop-parse-tree digits-parse-result))))
+;;         (else digits-parse-result))))
+;;  parser)
+
+(def (parse-valid-identifier-non-digit-char)
+  (parse-any-char (string->list "_$-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnophijklmnopqrstuvwxyz")))
+
+(def (parse-valid-identifier-char)
+  (parse-any-char (string->list "_$-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnophijklmnopqrstuvwxyz0123456789")))
 
 (def (parse-digit)
   (parse-any-char (string->list "0123456789")))
@@ -115,14 +255,15 @@
 
 (def (parse-char char)
   (def (parser stream)
-    (displayln "stream:")
-    (displayln (parse-stream-input-stream stream))
-    (displayln (parse-stream-parse-tree stream))
-    (displayln "now parsing:")
-    (displayln char)
+    ;;(displayln "stream:")
+   ;; (displayln (parse-stream-input-stream stream))
+    ;;(displayln (parse-stream-parse-tree stream))
+    ;;(displayln "now parsing:")
+   ;; (displayln char)
     (match stream
       ((parse-stream parse-tree input-stream)
-       (if (equal? (car input-stream) char)
+       (if (and (not (null? input-stream))
+                (equal? (car input-stream) char))
          (make-parse-stream (append-car char parse-tree) (cdr input-stream))
          (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char)))))
       (else (make-parse-fail ""))))
@@ -178,7 +319,7 @@
     (let (parse-result (parser stream))
       (if (parse-stream? parse-result)
         (repeat-phase parse-result)
-        (parse-result))))
+        parse-result)))
   repeat-parser)
 
 ;; todo: define a more-input? function
@@ -231,30 +372,49 @@
 ;;
 ;;
 
-
 ;; COMPOSE CONCEPT ;;;;;;
 (def (compose f g)
   (lambda args
     (g (apply f args))))
 
 
-;; helpers ;;;;;;;;;
+;; special parse-tree helpers ;;;;;;;;;;;;;;;
 
-(def (append-car x lst)
-  "append x to the car of the list"
-  (cons (append (car lst) (list x)) (cdr lst)))
+(def (parse-to-tree-node parser node-builder stream )
+  "Runs the specified parser against the stream and builds the result as a new node on the parse tree"
+  (let* ((prepped-stream (push-parse-tree [] stream))
+         (parse-result (parser prepped-stream)))
+    (match parse-result
+      ((parse-stream tree input) (pop-build-push parse-result node-builder))
+      (else parse-result))))
+
+(def (pop-build-push stream node-builder)
+  (let* ((popped-stream (pop-parse-tree stream))
+         (popped-stream-tree (car popped-stream))
+         (popped-stream-stream (car (cdr popped-stream)))
+         (node (node-builder popped-stream-tree)))
+    (push-parse-tree [node] popped-stream-stream)))
 
 (def (pop-parse-tree stream)
-  "pops the parse-tree stack of the parse-stream, returns as new parse-stream"
+  "pops the parse-tree stack off the parse-stream, returns as new parse-stream"
   (match stream
-    ((parse-stream parse-tree input-stream) (make-parse-stream (cdr parse-tree) input-stream))
-    (else nil)))
+    ((parse-stream parse-tree input-stream)
+     [(car parse-tree)
+      (make-parse-stream (cdr parse-tree) input-stream)])
+    (else stream)))
 
 (def (push-parse-tree tree stream)
   "pushes specified tree onto parse-stream's parse-tree stack and returns as new parse-stream"
   (match stream
     ((parse-stream parse-tree input-stream) (make-parse-stream (cons tree parse-tree) input-stream))
-    (else nil)))
+    (else stream)))
+
+
+;; miscelaneous helpers ;;;;;;;;;
+
+(def (append-car x lst)
+  "append x to the car of the list"
+  (cons (append (car lst) (list x)) (cdr lst)))
 
 (def (digit-list->number digit-list)
   "converts a number represented by list of digit characters to the actual number value"
