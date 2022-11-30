@@ -3,7 +3,7 @@
 
 ;; Main: Entry point of program ;;;;;;
 (def (main . args)
-  (binary-exp-parse-test))
+  (string-parse-test-new))
 
 ;; Main structures ;;;;;;;;;;;;;
 
@@ -26,6 +26,7 @@
 ;; parse-to-types
 (defstruct expression (exp))
 (defstruct int-literal (value))
+(defstruct string-literal (value))
 (defstruct identifier (name))
 (defstruct binary-exp (left-exp op right-exp))
 (defstruct if-exp (test-exp true-exp false-exp))
@@ -123,9 +124,9 @@
   (match stream
     ((parse-stream tree input-stream)
      (displayln "Tree: ")
-     (print tree)
+     (displayln tree)
      (displayln "Input: ")
-     (print input-stream)
+     (displayln input-stream)
      (displayln ""))))
 
 ;; Parser Runner ;;;;;;;;;
@@ -269,6 +270,86 @@
       (else (make-parse-fail ""))))
   parser)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; trying out the new stack idea
+;;
+
+
+;; ;; new idea - integers
+
+;; gonna try integers now after strings,
+;; then see if can parse combinations of strings and integers
+;; using this new modified stack idea
+
+(def (parse-integer-new)
+  (def (parser stream)
+    (let* ((digits-parser (parse-digit-new))
+           (digits-parse-result (digits-parser stream)))
+      (match digits-parse-result)
+
+      
+  parser)
+
+
+(def (parse-digit-new)
+  (parse-any-char-new (string->list "0123456789")))
+
+
+(def (parse-any-char-new chars)
+  (parse-any-of (map parse-char-new chars)))
+
+
+ ;;;;; new idea - strings
+
+(def (string-parse-test-new)
+  (let* ((parser (parse-string-new "coolness"))
+         (input (string->list "coolness"))
+         (parse-tree [['x 'y]])
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+
+(def (parse-string-new str)
+  (def (parser stream)
+    (let* ((str-chars (string->list str))
+           (characters-parser (parse-pipeline (map parse-char-new str-chars)))
+           (characters-parser-result (characters-parser stream)))
+      (match characters-parser-result
+        ((parse-stream parse-tree input-stream) (let* ((char-parsed-count (length str-chars))
+                                                       (parsed-characters (take parse-tree char-parsed-count))
+                                                       (parsed-string (list->string (reverse parsed-characters)))
+                                                       (string-node (make-string-literal (reverse parsed-characters)))
+                                                       (orig-stream-tree (parse-stream-parse-tree stream))
+                                                       (new-tree (cons string-node orig-stream-tree)))
+                                                  (make-parse-stream new-tree input-stream)))
+        (else (make-parse-fail "failed to parse string")))))
+  parser)
+
+;;; later: hmmm need a Pop-N?
+
+(def (parse-char-new char)
+  (def (parser stream)
+    ;;(displayln "stream:")
+   ;; (displayln (parse-stream-input-stream stream))
+    ;;(displayln (parse-stream-parse-tree stream))
+    ;;(displayln "now parsing:")
+   ;; (displayln char)
+    (match stream
+      ((parse-stream parse-tree input-stream)
+       (if (and (not (null? input-stream))
+                (equal? (car input-stream) char))
+         (make-parse-stream (cons char parse-tree) (cdr input-stream))
+         (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char)))))
+      (else (make-parse-fail ""))))
+
+  parser)
+
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;
+
+
 
 ;; combinators
 ;; need to make a few different variants,
@@ -380,6 +461,8 @@
 
 ;; special parse-tree helpers ;;;;;;;;;;;;;;;
 
+
+
 (def (parse-to-tree-node parser node-builder stream )
   "Runs the specified parser against the stream and builds the result as a new node on the parse tree"
   (let* ((prepped-stream (push-parse-tree [] stream))
@@ -388,7 +471,14 @@
       ((parse-stream tree input) (pop-build-push parse-result node-builder))
       (else parse-result))))
 
+;; I think I need to explore combining with PREVIOUS LEVEL's tree
+;; instead of pushing built node to the top level.
+;; Because that top of stack is really to hold intermediate raw parse results,
+;; and end goal is to pop that away and build onto the main tree with node
+;; we built from intermediate raw result
+
 (def (pop-build-push stream node-builder)
+  "pop the parse-tree, use the popped to build node, then push that new node back"
   (let* ((popped-stream (pop-parse-tree stream))
          (popped-stream-tree (car popped-stream))
          (popped-stream-stream (car (cdr popped-stream)))
@@ -414,7 +504,7 @@
 
 (def (append-car x lst)
   "append x to the car of the list"
-  (cons (append (car lst) (list x)) (cdr lst)))
+  (cons (append  (if (null? lst) [] (car lst)) (list x)) (cdr lst)))
 
 (def (digit-list->number digit-list)
   "converts a number represented by list of digit characters to the actual number value"
