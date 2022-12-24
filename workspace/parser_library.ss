@@ -3,7 +3,7 @@
 
 ;; Main: Entry point of program ;;;;;;
 (def (main . args)
-  (string-parse-test-new))
+  (parse-test-new))
 
 ;; Main structures ;;;;;;;;;;;;;
 
@@ -49,6 +49,7 @@
 (def (print-parse-tree-node node)
   (match node
     ((int-literal value) (print (string-append "INT<" (number->string value) ">")))
+    ((string-literal value) (print (string-append "STRING<" value ">")))
     ((identifier name) (print (string-append "ID<" name ">")))
     ((expression exp)
      (print "EXP [" )
@@ -143,7 +144,9 @@
        (displayln "Parse Tree: ")
        (print-parse-tree-stack parse-tree)
        parse-tree)
-      ((parse-fail msg) (displayln msg) '())
+      ((parse-fail msg)
+       (displayln "PARSE FAIL.  Error Message: ")
+       (displayln msg))
       (else (displayln "??") '()))))
 
 
@@ -281,14 +284,53 @@
 ;; gonna try integers now after strings,
 ;; then see if can parse combinations of strings and integers
 ;; using this new modified stack idea
+;;
+;;
+
+(def (parse-test-new)
+  (let* ((parser (parse-foo-int-blah))
+         (input-str "foo7071882092311blah")
+         (input (string->list input-str))
+         (parse-tree [['x 'y]])
+         (parse-stream (make-parse-stream parse-tree input)))
+    (displayln "")
+    (displayln "")
+    (displayln (string-append "Original input: " input-str))
+    (run-parser parser parse-stream)))
+
+(def (parse-foo-int-blah)
+  (parse-pipeline
+   [(parse-string-new "foo")
+    (parse-integer-new)
+    (parse-string-new "blah")]))
 
 (def (parse-integer-new)
   (def (parser stream)
-    (let* ((digits-parser (parse-digit-new))
-           (digits-parse-result (digits-parser stream)))
-      (match digits-parse-result)
+    (let* ((digits-parser (parser-repeat (parse-digit-new)))
+           (digits-parse-stream (make-parse-stream '() (parse-stream-input-stream stream)))
+           (digits-parse-result (digits-parser digits-parse-stream)))
+      (match digits-parse-result
+        ((parse-stream parse-tree input-stream) (make-parse-stream
+                                                 (cons
+                                                  (make-int-literal (digit-list->number (reverse parse-tree)))
+                                                  (parse-stream-parse-tree stream))
+                                                 input-stream))
+        (else (make-parse-fail "failed to parse integer")))))
+  parser)
 
-      
+(def (parse-string-new str)
+  (def (parser stream)
+    (let* ((str-chars (string->list str))
+           (characters-parser (parse-pipeline (map parse-char-new str-chars)))
+           (sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
+           (characters-parser-result (characters-parser sub-tree-stream)))
+      (match characters-parser-result
+        ((parse-stream parse-tree input-stream) (make-parse-stream
+                                                 (cons
+                                                  (make-string-literal (list->string (reverse parse-tree)))
+                                                  (parse-stream-parse-tree stream))
+                                                 input-stream))
+        (else (make-parse-fail (string-append "failed to parse string \"" str "\""))))))
   parser)
 
 
@@ -302,29 +344,6 @@
 
  ;;;;; new idea - strings
 
-(def (string-parse-test-new)
-  (let* ((parser (parse-string-new "coolness"))
-         (input (string->list "coolness"))
-         (parse-tree [['x 'y]])
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))
-
-
-(def (parse-string-new str)
-  (def (parser stream)
-    (let* ((str-chars (string->list str))
-           (characters-parser (parse-pipeline (map parse-char-new str-chars)))
-           (characters-parser-result (characters-parser stream)))
-      (match characters-parser-result
-        ((parse-stream parse-tree input-stream) (let* ((char-parsed-count (length str-chars))
-                                                       (parsed-characters (take parse-tree char-parsed-count))
-                                                       (parsed-string (list->string (reverse parsed-characters)))
-                                                       (string-node (make-string-literal (reverse parsed-characters)))
-                                                       (orig-stream-tree (parse-stream-parse-tree stream))
-                                                       (new-tree (cons string-node orig-stream-tree)))
-                                                  (make-parse-stream new-tree input-stream)))
-        (else (make-parse-fail "failed to parse string")))))
-  parser)
 
 ;;; later: hmmm need a Pop-N?
 
