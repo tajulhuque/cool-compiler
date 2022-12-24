@@ -3,7 +3,7 @@
 
 ;; Main: Entry point of program ;;;;;;
 (def (main . args)
-  (parse-test-new))
+  (string-parse-test))
 
 ;; Main structures ;;;;;;;;;;;;;
 
@@ -178,6 +178,7 @@
 ;;There are THREE Seperate results parse results to look for here.
 ;;LEFT EXP, OP, RIGHT EXP
 
+;; FIX THIS:
 (def (parse-binary-exp operators)
   (def (parser stream)
     (trace-msg "..parse-binary-exp" stream)
@@ -192,6 +193,7 @@
   parser)
 
 
+;; FIX THIS:
 (def (parse-identifier)
   (def (parser stream)
     (trace-msg "..........parse-identifier" stream)
@@ -205,31 +207,6 @@
   parser)
 
 
-(def (parse-integer)
-  (def (parser stream)
-    (trace-msg "..........parse-integer" stream)
-    (parse-to-tree-node
-     (parser-repeat (parse-digit))
-     (lambda (parsed-digits-tree)
-       (make-int-literal (digit-list->number parsed-digits-tree)))
-     stream))
-  parser)
-
-
-    ;;(let* ((digits-parser (parser-repeat (parse-digit)))
-     ;;      (prepped-stream (push-parse-tree [] stream))
-      ;;     (digits-parse-result (digits-parser prepped-stream)))
-      ;;(match digits-parse-result
-;        ((parse-stream tree input) (pop-build-push digits-parse-result tree
-;;                                                   (lambda (parsed-digits-tree)
- ;;                                                    (make-int-literal (digit-list->number parsed-digits-tree)))))
-
-
-         ;;(let* ((parsed-digits-branch (car tree))
-         ;;      (parsed-int-literal (make-int-literal (digit-list->number parsed-digits-branch))))
-         ;; (push-parse-tree parsed-int-literal (pop-parse-tree digits-parse-result))))
-;;         (else digits-parse-result))))
-;;  parser)
 
 (def (parse-valid-identifier-non-digit-char)
   (parse-any-char (string->list "_$-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnophijklmnopqrstuvwxyz")))
@@ -237,76 +214,15 @@
 (def (parse-valid-identifier-char)
   (parse-any-char (string->list "_$-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnophijklmnopqrstuvwxyz0123456789")))
 
-(def (parse-digit)
-  (parse-any-char (string->list "0123456789")))
-
-(def (parse-letter)
-  (def parser
-    (parse-any-char (string->list "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnophijklmnopqrstuvwxyz")))
-  parser)
-
-
-(def (parse-any-char chars)
-  (def parser
-      (parse-any-of (map parse-char chars)))
-  parser)
-
-(def (parse-string str)
-  (def parser
-    (let (str-chars (string->list str))
-      (parse-pipeline (map parse-char str-chars))))
-  parser)
-
-(def (parse-char char)
-  (def (parser stream)
-    ;;(displayln "stream:")
-   ;; (displayln (parse-stream-input-stream stream))
-    ;;(displayln (parse-stream-parse-tree stream))
-    ;;(displayln "now parsing:")
-   ;; (displayln char)
-    (match stream
-      ((parse-stream parse-tree input-stream)
-       (if (and (not (null? input-stream))
-                (equal? (car input-stream) char))
-         (make-parse-stream (append-car char parse-tree) (cdr input-stream))
-         (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char)))))
-      (else (make-parse-fail ""))))
-  parser)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; trying out the new stack idea
-;;
-
-
-;; ;; new idea - integers
-
-;; gonna try integers now after strings,
-;; then see if can parse combinations of strings and integers
-;; using this new modified stack idea
-;;
-;;
-
-(def (parse-test-new)
-  (let* ((parser (parse-foo-int-blah))
-         (input-str "foo7071882092311blah")
-         (input (string->list input-str))
-         (parse-tree [['x 'y]])
-         (parse-stream (make-parse-stream parse-tree input)))
-    (displayln "")
-    (displayln "")
-    (displayln (string-append "Original input: " input-str))
-    (run-parser parser parse-stream)))
-
 (def (parse-foo-int-blah)
   (parse-pipeline
-   [(parse-string-new "foo")
-    (parse-integer-new)
-    (parse-string-new "blah")]))
+   [(parse-string "foo")
+    (parse-integer)
+    (parse-string "blah")]))
 
-(def (parse-integer-new)
+(def (parse-integer)
   (def (parser stream)
-    (let* ((digits-parser (parser-repeat (parse-digit-new)))
+    (let* ((digits-parser (parser-repeat (parse-digit)))
            (digits-parse-stream (make-parse-stream '() (parse-stream-input-stream stream)))
            (digits-parse-result (digits-parser digits-parse-stream)))
       (match digits-parse-result
@@ -318,10 +234,11 @@
         (else (make-parse-fail "failed to parse integer")))))
   parser)
 
-(def (parse-string-new str)
+;; todo: parse the string between quotes
+(def (parse-string str)
   (def (parser stream)
     (let* ((str-chars (string->list str))
-           (characters-parser (parse-pipeline (map parse-char-new str-chars)))
+           (characters-parser (parse-pipeline (map parse-char str-chars)))
            (sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
            (characters-parser-result (characters-parser sub-tree-stream)))
       (match characters-parser-result
@@ -334,20 +251,19 @@
   parser)
 
 
-(def (parse-digit-new)
-  (parse-any-char-new (string->list "0123456789")))
+(def (parse-digit)
+  (parse-any-char (string->list "0123456789")))
 
 
-(def (parse-any-char-new chars)
-  (parse-any-of (map parse-char-new chars)))
-
+(def (parse-any-char chars)
+  (parse-any-of (map parse-char chars)))
 
  ;;;;; new idea - strings
 
 
 ;;; later: hmmm need a Pop-N?
 
-(def (parse-char-new char)
+(def (parse-char char)
   (def (parser stream)
     ;;(displayln "stream:")
    ;; (displayln (parse-stream-input-stream stream))
