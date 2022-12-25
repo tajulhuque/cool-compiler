@@ -3,7 +3,7 @@
 
 ;; Main: Entry point of program ;;;;;;
 (def (main . args)
-  (string-parse-test))
+  (binary-exp-parse-test))
 
 ;; Main structures ;;;;;;;;;;;;;
 
@@ -71,7 +71,6 @@
     (run-parser parser parse-stream)))
 
 
-
 (def (expression-parse-test)
   (let* ((parser (parse-expression))
          (input (string->list "abc123"))
@@ -95,7 +94,7 @@
 
 (def (string-parse-test)
   (let* ((parser (parse-string "coolness"))
-         (input (string->list "coolness"))
+         (input (string->list "\"coolness\""))
          (parse-tree '())
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
@@ -157,17 +156,13 @@
 ;; Note that COOL specific stuff probably wouldn't belong in
 ;; this "library" module... but abstracting out of specific
 ;; vs general domain will come much later... not at that state yet.
+;; FIX THIS:
 (def (parse-expression)
-  (def (parser stream)
-    (trace-msg ".....parse-expression" stream)
-    (parse-to-tree-node
-     (parse-any-of
-      [(parse-identifier)
-       (parse-integer)])
-     (lambda (parse-result-tree)
-       (make-expression parse-result-tree))
-     stream))
-  parser)
+  (let ((parser (parse-any-of [(parse-identifier) (parse-integer)]))
+        (on-success-node-builder  (lambda (parse-result-tree)
+                                    (make-expression parse-result-tree)))
+        (on-fail-message "failed to parse expression"))
+    (make-parser parser on-success-node-builder on-fail-message)))
 
 
 ;; NOW with this one... the recursive definition aspect
@@ -177,34 +172,40 @@
 ;;We can't just do parse-tree-to-node here.
 ;;There are THREE Seperate results parse results to look for here.
 ;;LEFT EXP, OP, RIGHT EXP
-
-;; FIX THIS:
 (def (parse-binary-exp operators)
-  (def (parser stream)
-    (trace-msg "..parse-binary-exp" stream)
-    (parse-to-tree-node
-     (parse-pipeline
-      [(parse-expression)
-       (parse-any-char operators)
-       (parse-expression)])
-     (lambda (operands-between-operator)
-       (make-expression operands-between-operator))
-     stream))
-  parser)
+  (let ((parser (parse-pipeline
+                 [(parse-expression)
+                  (parse-any-char operators)
+                  (parse-expression)]))
+        (on-success-node-builder (lambda (operands-between-operator)
+                                   (make-expression operands-between-operator)))
+        (on-fail-message "failed to parse expression"))
+    (make-parser parser on-success-node-builder on-fail-message)))
 
 
-;; FIX THIS:
+
 (def (parse-identifier)
-  (def (parser stream)
-    (trace-msg "..........parse-identifier" stream)
-    (parse-to-tree-node
-     (parse-pipeline
-      [(parse-valid-identifier-non-digit-char)
-       (parser-repeat (parse-valid-identifier-char))])
-     (lambda (parse-result-tree)
-       (make-identifier (list->string parse-result-tree)))
-     stream))
-  parser)
+  (let ((parser (parse-pipeline [(parse-valid-identifier-non-digit-char)
+                                 (parser-repeat (parse-valid-identifier-char))]))
+        (on-success-node-builder  (lambda (parse-tree)
+                                    (make-identifier (list->string (reverse parse-tree)))))
+        (on-fail-message "failed to parse identifier"))
+    (make-parser parser on-success-node-builder on-fail-message)))
+
+
+(def (make-parser parser on-success-node-builder on-failure-message)
+  (def (new-parser stream)
+    (let* ((sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
+           (sub-tree-parse-result (parser sub-tree-stream)))
+      (match sub-tree-parse-result
+        ((parse-stream parse-tree input-stream) (make-parse-stream
+                                                 (cons
+                                                  (on-success-node-builder parse-tree)
+                                                  (parse-stream-parse-tree stream))
+                                                 input-stream))
+        (else (make-parse-fail on-failure-message)))))
+  new-parser)
+
 
 
 
@@ -235,19 +236,23 @@
   parser)
 
 ;; todo: parse the string between quotes
+;; todo: parse anything between the quotes
 (def (parse-string str)
   (def (parser stream)
     (let* ((str-chars (string->list str))
            (characters-parser (parse-pipeline (map parse-char str-chars)))
+           (string-parser (parse-pipeline [(parse-char #\")
+                                           characters-parser
+                                           (parse-char #\")]))
            (sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
-           (characters-parser-result (characters-parser sub-tree-stream)))
-      (match characters-parser-result
+           (string-parser-result (string-parser sub-tree-stream)))
+      (match string-parser-result
         ((parse-stream parse-tree input-stream) (make-parse-stream
                                                  (cons
                                                   (make-string-literal (list->string (reverse parse-tree)))
                                                   (parse-stream-parse-tree stream))
                                                  input-stream))
-        (else (make-parse-fail (string-append "failed to parse string \"" str "\""))))))
+        (else (make-parse-fail (string-append "failed to parse string" str))))))
   parser)
 
 
