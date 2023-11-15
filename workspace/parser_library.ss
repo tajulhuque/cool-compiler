@@ -1,6 +1,5 @@
 #!/usr/bin/env gxi
 
-
 ;; Main: Entry point of program ;;;;;;
 (def (main . args)
   (binary-exp-parse-test))
@@ -25,47 +24,111 @@
 
 ;; parse-to-types
 (defstruct expression (exp))
+(defstruct sub-expression (exp))
 (defstruct int-literal (value))
 (defstruct string-literal (value))
 (defstruct identifier (name))
 (defstruct binary-exp (left-exp op right-exp))
-(defstruct if-exp (test-exp true-exp false-exp))
-(defstruct identifier (name))
-
 
 ;; Visualizers
 
 (def (print-parse-tree-stack tree-stack)
-  (displayln "----")
-  (map (lambda (elem)
-         (if (list? elem)
-           (print-parse-tree-stack elem)
-           (print-parse-tree-node elem)))
-       tree-stack)
-  (displayln "")
-  (displayln "----"))
+  (print-parse-tree-node (car tree-stack) 0 "")
+  (displayln))
 
+(def (print-node type-label value-printer)
+    (print type-label)
+    (print ": ")
+    ;;(print "<")
+    (value-printer))
+    ;;(print ">"))
 
-(def (print-parse-tree-node node)
+(def (print-simple-node type-label value)
+  (print-node type-label
+              (lambda ()
+                (print value))))
+
+(def (print-parse-tree-node node level tag)
+
+  (displayln)
+
+  (let loop ((n 0))
+    (if (< n level)
+      (begin
+        (print "  ")
+        (loop (1+ n)))))
+
+  (when (> (string-length tag) 0)
+    (print tag)
+    (print ": "))
+
   (match node
-    ((int-literal value) (print (string-append "INT<" (number->string value) ">")))
-    ((string-literal value) (print (string-append "STRING<" value ">")))
-    ((identifier name) (print (string-append "ID<" name ">")))
+    ((int-literal value) (print-simple-node "INT" value))
+    ((string-literal value) (print-simple-node "STRING" value))
+    ((identifier name) (print-simple-node "ID" name))
+    ((binary-exp left-exp op right-exp)
+     (print-node "BINARY-EXP"
+                 (lambda ()
+                   (print-parse-tree-node left-exp (+ 1 level) "L")
+                   (print-parse-tree-node op (+ 1 level) "Op")
+                   (print-parse-tree-node right-exp (+ 1 level) "R"))))
     ((expression exp)
-     (print "EXP [" )
-     (print-parse-tree-node exp)
-     (print "]"))
-    (else (print node)))
-  (print " "))
+     (print-node "EXP"
+                 (lambda ()
+                   (print-parse-tree-node exp (+ 1 level) ""))))
+    ((sub-expression sub-exp) (print-simple-node "SUBEXP" value))
+    (else (print node))))
+
 
 ;; 09/18/2022: Starting to get to the point where I need to learn
 ;; Gerbil/Gambit's debugging support.  Need a stacktrace at present.
 
+
+
+;; Parser Runner ;;;;;;;;;
+;;
+(def (run-parser parser stream)
+  (let (parse-result (parser stream))
+    ;;(displayln parser)
+    (match parse-result
+      ((parse-stream parse-tree input-stream)
+       (displayln "SUCCESSFUL PARSE")
+       (displayln "Final Parse Progress Result: (tree, input)")
+       (displayln parse-tree)
+       (displayln input-stream)
+       (displayln "Parse Tree: ")
+       (print-parse-tree-stack parse-tree))
+       (displayln "")
+      ((parse-fail msg)
+       (displayln "PARSE FAIL.  Error Message: ")
+       (displayln msg))
+      (else (displayln "??") '()))))
+
+
+
+
+
 ;; TEST Functions
 ;;
-(def (binary-exp-parse-test)
+;;
+;;
+
+
+
+
+
+
+(def (binary-exp-parse-test2)
   (let* ((parser (parse-binary-exp [#\+]))
-         (input (string->list "123+abc$"))
+         (input (string->list "123+abc$+777"))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+
+(def (binary-exp-parse-test)
+  (let* ((parser (parse-expression))
+         (input (string->list "128*a2bc_"))
          (parse-tree '())
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
@@ -129,26 +192,6 @@
      (displayln input-stream)
      (displayln ""))))
 
-;; Parser Runner ;;;;;;;;;
-;;
-(def (run-parser parser stream)
-  (let (parse-result (parser stream))
-    ;;(displayln parser)
-    (match parse-result
-      ((parse-stream parse-tree input-stream)
-       (displayln "SUCCESSFUL PARSE")
-       (displayln "Final Parse Progress Result: (tree, input)")
-       (displayln parse-tree)
-       (displayln input-stream)
-       (displayln "Parse Tree: ")
-       (print-parse-tree-stack parse-tree)
-       parse-tree)
-      ((parse-fail msg)
-       (displayln "PARSE FAIL.  Error Message: ")
-       (displayln msg))
-      (else (displayln "??") '()))))
-
-
 ;; Start Of Parser "Library" ;;;;;;;;;
 
 ;; This one is the heart of it all, and will
@@ -156,14 +199,36 @@
 ;; Note that COOL specific stuff probably wouldn't belong in
 ;; this "library" module... but abstracting out of specific
 ;; vs general domain will come much later... not at that state yet.
-;; FIX THIS:
+;;
+;;
 (def (parse-expression)
-  (let ((parser (parse-any-of [(parse-identifier) (parse-integer)]))
+  (let ((parser-builder (lambda ()
+                          (parse-any-of [
+                                         (parse-terminal)
+                                         (parse-binary-exp [#\+ #\- #\*])
+                                        ])))
         (on-success-node-builder  (lambda (parse-result-tree)
-                                    (make-expression parse-result-tree)))
+                                    (make-expression (car parse-result-tree))))
         (on-fail-message "failed to parse expression"))
-    (make-parser parser on-success-node-builder on-fail-message)))
+    (make-parser "parse-exp" parser-builder on-success-node-builder on-fail-message)))
 
+
+(def (parse-terminal)
+  (let ((parser-builder (lambda () (parse-any-of [(parse-integer) (parse-identifier)])))
+        (on-success-node-builder  (lambda (terminal) terminal))
+        (on-fail-message "failed to parse terminal"))
+    (make-parser "parse-terminal" parser-builder on-success-node-builder on-fail-message)))
+
+;;(def (parse-sub-expression)
+;;;; Todo: need to check if starts with '( and ends with ')
+;;;; thinking to start with constraint that sub-expressions need to be in parenthesis
+;;;;
+;;;; 7/27/23: Current plan is parse sub expressions and return them as
+;;;; "sub-expression type" that captures the sub expression unparsed.
+;;;; Then hoping to traverse the tree again on subsequent passes to parse out
+;;;; inner sub-expressions... not sure if that will work though.  This came up
+;;;; after realizing that cannot expresses my parser function builders (ctors)
+;;;; recursively ... not sure if there is maybe away to rely on lazy mechanism to do that though...
 
 ;; NOW with this one... the recursive definition aspect
 ;; starts to unfold! Expressions referring to Expressions!
@@ -172,30 +237,72 @@
 ;;We can't just do parse-tree-to-node here.
 ;;There are THREE Seperate results parse results to look for here.
 ;;LEFT EXP, OP, RIGHT EXP
+
+
+;; TODO: 11/15/23: Latest Idea I had over the summer
+;; was that I need to first break the input into pieces.
+;; A piece for the left side and the right side.
+;; First step would be to see if the input has operators (return failured if not)
+;; then, split up the stream by the operator to get the left and ride sides...
+;; get them as input-stream!  Then, run parse-expression on each of the left
+;; and right side and get their results, if either of them fail then deal with it,
+;; otherwise stitch each of their results into a binary-exp to return!
+;; NOTE: In my original vision I saw my parsers being strung together in such a way
+;; that I would never have to slice and dice the input like that, but it seems
+;; like I must do that, beause for example if I have a parse-expression run on <left>+<right> input,
+;; I'm not sure how to make only parse <left> and not go too far.  I got really stuck on questions like that
+;; and then realized I probably need to adjust my vision and instead give the parsers more focused input.
+;; *** To Begin ***
+;; I'm thinking I need to make a little library that can help split up an input-sream... can start it as
+;; just a split function -- key is wrap the result in input-stream.  Just make that and unit test it to get started
+
 (def (parse-binary-exp operators)
-  (let ((parser (parse-pipeline
-                 [(parse-expression)
-                  (parse-any-char operators)
-                  (parse-expression)]))
-        (on-success-node-builder (lambda (operands-between-operator)
-                                   (make-expression operands-between-operator)))
-        (on-fail-message "failed to parse expression"))
-    (make-parser parser on-success-node-builder on-fail-message)))
+  (let* ((parser-builder (lambda ()
+                           (parse-pipeline [(parse-expression) (parse-any-char operators) (parse-expression)])))
+         (on-success-node-builder (lambda (parse-sub-tree)
+                                    (let ((left-operand (car (cdr (cdr parse-sub-tree))))
+                                          (operator (car (cdr parse-sub-tree)))
+                                          (right-operand (car parse-sub-tree)))
+                                      (make-binary-exp left-operand operator right-operand))))
+         (on-fail-message "failed to parse binary expression"))
+    (make-parser "parse-binary-exp" parser-builder on-success-node-builder on-fail-message)))
 
 
 
 (def (parse-identifier)
-  (let ((parser (parse-pipeline [(parse-valid-identifier-non-digit-char)
-                                 (parser-repeat (parse-valid-identifier-char))]))
+  (let ((parser-builder (lambda ()
+                          (parse-pipeline [(parse-valid-identifier-non-digit-char)
+                                           (parser-repeat (parse-valid-identifier-char))])))
         (on-success-node-builder  (lambda (parse-tree)
                                     (make-identifier (list->string (reverse parse-tree)))))
         (on-fail-message "failed to parse identifier"))
-    (make-parser parser on-success-node-builder on-fail-message)))
+    (make-parser "parse-identifier" parser-builder on-success-node-builder on-fail-message)))
 
 
-(def (make-parser parser on-success-node-builder on-failure-message)
+ ;; (def (new-parser stream)
+  ;;  (trace-msg (string-append "running " name) stream)
+   ;; (print (parse-stream-input-stream stream))
+    ;;(displayln)
+    ;;(displayln)
+    ;;(let* ((sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
+     ;;      (sub-tree-parse-result (parser sub-tree-stream)))
+     ;; (match sub-tree-parse-result
+      ;;  ((parse-stream parse-tree input-stream) (make-parse-stream
+       ;;                                          (cons
+        ;;                                          (on-success-node-builder parse-tree)
+         ;;                                         (parse-stream-parse-tree stream))
+          ;;                                       input-stream))
+       ;; (else (make-parse-fail on-failure-message)))))
+ ;; new-parser)
+
+(def (make-parser name parser-builder on-success-node-builder on-failure-message)
   (def (new-parser stream)
+    (trace-msg (string-append "running " name) stream)
+    (print (parse-stream-input-stream stream))
+    (displayln)
+    (displayln)
     (let* ((sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
+           (parser (parser-builder))
            (sub-tree-parse-result (parser sub-tree-stream)))
       (match sub-tree-parse-result
         ((parse-stream parse-tree input-stream) (make-parse-stream
@@ -205,6 +312,7 @@
                                                  input-stream))
         (else (make-parse-fail on-failure-message)))))
   new-parser)
+
 
 
 
@@ -223,6 +331,7 @@
 
 (def (parse-integer)
   (def (parser stream)
+    (trace-msg "running parse-integer" stream)
     (let* ((digits-parser (parser-repeat (parse-digit)))
            (digits-parse-stream (make-parse-stream '() (parse-stream-input-stream stream)))
            (digits-parse-result (digits-parser digits-parse-stream)))
@@ -239,6 +348,7 @@
 ;; todo: parse anything between the quotes
 (def (parse-string str)
   (def (parser stream)
+
     (let* ((str-chars (string->list str))
            (characters-parser (parse-pipeline (map parse-char str-chars)))
            (string-parser (parse-pipeline [(parse-char #\")
