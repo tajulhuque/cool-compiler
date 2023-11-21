@@ -1,8 +1,16 @@
-#!/usr/bin/env gxi
 
-;; Main: Entry point of program ;;;;;;
-(def (main . args)
-  (binary-exp-parse-test))
+
+(export parse-expression)
+(export parse-binary-exp)
+(export parse-integer)
+(export parse-identifier)
+(export parse-string)
+(export run-parser)
+(export parse-stream)
+(export make-parse-stream)
+(export parse-fail)
+(export make-parse-fail)
+
 
 ;; Main structures ;;;;;;;;;;;;;
 
@@ -37,16 +45,16 @@
   (displayln))
 
 (def (print-node type-label value-printer)
-    (print type-label)
-    (print ": ")
-    ;;(print "<")
+    (display type-label)
+    (display ": ")
+    ;;(display "<")
     (value-printer))
-    ;;(print ">"))
+    ;;(display ">"))
 
 (def (print-simple-node type-label value)
   (print-node type-label
               (lambda ()
-                (print value))))
+                (display value))))
 
 (def (print-parse-tree-node node level tag)
 
@@ -55,12 +63,12 @@
   (let loop ((n 0))
     (if (< n level)
       (begin
-        (print "  ")
+        (display "  ")
         (loop (1+ n)))))
 
   (when (> (string-length tag) 0)
-    (print tag)
-    (print ": "))
+    (display tag)
+    (display ": "))
 
   (match node
     ((int-literal value) (print-simple-node "INT" value))
@@ -76,8 +84,8 @@
      (print-node "EXP"
                  (lambda ()
                    (print-parse-tree-node exp (+ 1 level) ""))))
-    ((sub-expression sub-exp) (print-simple-node "SUBEXP" value))
-    (else (print node))))
+    ((sub-expression sub-exp) (print-simple-node "SUBEXP" sub-exp))
+    (else (display node))))
 
 
 ;; 09/18/2022: Starting to get to the point where I need to learn
@@ -104,81 +112,6 @@
        (displayln msg))
       (else (displayln "??") '()))))
 
-
-
-
-
-;; TEST Functions
-;;
-;;
-;;
-
-
-
-
-
-
-(def (binary-exp-parse-test2)
-  (let* ((parser (parse-binary-exp [#\+]))
-         (input (string->list "123+abc$+777"))
-         (parse-tree '())
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))
-
-
-(def (binary-exp-parse-test)
-  (let* ((parser (parse-expression))
-         (input (string->list "128*a2bc_"))
-         (parse-tree '())
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))
-
-
-(def (expression-parse-test)
-  (let* ((parser (parse-expression))
-         (input (string->list "abc123"))
-         (parse-tree '((3 2 4) 4 3))
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))
-
-(def (identifier-parse-test)
-  (let* ((parser (parse-identifier))
-         (input (string->list "_412Rerfj"))
-         (parse-tree '((3 2 4) 4 3))
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))
-
-(def (integer-parse-test)
-  (let* ((parser (parse-integer))
-         (input (string->list "123"))
-         (parse-tree '((3 2 4) 4 3))
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))
-
-(def (string-parse-test)
-  (let* ((parser (parse-string "coolness"))
-         (input (string->list "\"coolness\""))
-         (parse-tree '())
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))
-
-(def (alt-test)
-  (let* ((parser (parser-compose-alternate
-                  (parse-string "coolness")
-                  (parse-string "taj")))
-         (input (string->list "taj"))
-         (parse-tree '())
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))
-
-(def (repeat-test)
-  (let* ((parser (parser-repeat (parse-letter)))
-         (input (string->list "mmmgdf1123a"))
-         (parse-tree '())
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))
-
-;; End Test Methods
 
 
 ;; Debugging Utilities ;;;;;;;;;;;;;;;
@@ -281,7 +214,7 @@
 
  ;; (def (new-parser stream)
   ;;  (trace-msg (string-append "running " name) stream)
-   ;; (print (parse-stream-input-stream stream))
+   ;; (display (parse-stream-input-stream stream))
     ;;(displayln)
     ;;(displayln)
     ;;(let* ((sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
@@ -298,7 +231,7 @@
 (def (make-parser name parser-builder on-success-node-builder on-failure-message)
   (def (new-parser stream)
     (trace-msg (string-append "running " name) stream)
-    (print (parse-stream-input-stream stream))
+    (display (parse-stream-input-stream stream))
     (displayln)
     (displayln)
     (let* ((sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
@@ -422,7 +355,7 @@
 (def (parser-combine parsers composer)
   (def combined-parser
     (let (reversed-parsers (reverse parsers))
-      (fold composer (car reversed-parsers) (cdr reversed-parsers))))
+      (foldl composer (car reversed-parsers) (cdr reversed-parsers))))
   combined-parser)
 
 ;; parser-repeat - need to make parser parse
