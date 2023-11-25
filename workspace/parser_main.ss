@@ -7,11 +7,18 @@
 
 
 (def (binary-exp-parse-test)
-  (let* ((parser (parse-expression))
-         (input (string->list "128*a2bc_"))
+  (let* ((parser (parse-expression #f))
+         (input (string->list "128+a2bc+123"))
          (parse-tree '())
          (parse-stream (make-parse-stream parse-tree input)))
-    (displayln "running... attemmpt")
+    (run-parser parser parse-stream)))
+
+
+(def (empty-parse-test)
+  (let* ((parser (parse-empty))
+         (input (string->list "a"))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
 
 

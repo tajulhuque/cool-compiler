@@ -10,7 +10,9 @@
 (export make-parse-stream)
 (export parse-fail)
 (export make-parse-fail)
+(export parse-empty)
 
+(import "utils")
 
 ;; Main structures ;;;;;;;;;;;;;
 
@@ -97,20 +99,21 @@
 ;;
 (def (run-parser parser stream)
   (let (parse-result (parser stream))
-    ;;(displayln parser)
+    (displayln parse-result)
     (match parse-result
       ((parse-stream parse-tree input-stream)
-       (displayln "SUCCESSFUL PARSE")
-       (displayln "Final Parse Progress Result: (tree, input)")
-       (displayln parse-tree)
-       (displayln input-stream)
-       (displayln "Parse Tree: ")
-       (print-parse-tree-stack parse-tree))
-       (displayln "")
+       (begin
+        (displayln "SUCCESSFUL PARSE")
+        (displayln "Final Parse Progress Result: (tree, input)")
+        (displayln parse-tree)
+        (displayln input-stream)
+        (displayln "Parse Tree: ")
+        (print-parse-tree-stack parse-tree))
+        (displayln ""))
       ((parse-fail msg)
        (displayln "PARSE FAIL.  Error Message: ")
        (displayln msg))
-      (else (displayln "??") '()))))
+      (else (displayln "unknown result") "error"))))
 
 
 
@@ -134,12 +137,15 @@
 ;; vs general domain will come much later... not at that state yet.
 ;;
 ;;
-(def (parse-expression)
+(def (parse-expression (greedy #t))
   (let ((parser-builder (lambda ()
-                          (parse-any-of [
-                                         (parse-terminal)
-                                         (parse-binary-exp [#\+ #\- #\*])
-                                        ])))
+                          (parse-any-of (if greedy
+                                          (list
+                                           (parse-terminal)
+                                           (parse-binary-exp [#\+ #\- #\*]))
+                                          (list
+                                           (parse-pipeline [(parse-terminal) (parse-empty)])
+                                           (parse-pipeline [(parse-binary-exp [#\+ #\- #\*]) (parse-empty)]))))))
         (on-success-node-builder  (lambda (parse-result-tree)
                                     (make-expression (car parse-result-tree))))
         (on-fail-message "failed to parse expression"))
@@ -151,6 +157,17 @@
         (on-success-node-builder  (lambda (terminal) terminal))
         (on-fail-message "failed to parse terminal"))
     (make-parser "parse-terminal" parser-builder on-success-node-builder on-fail-message)))
+
+(def (parse-empty)
+  (def (parser stream)
+    (match stream
+      ((parse-stream parse-tree input-stream) (if (null? input-stream)
+                                               stream
+                                               (make-parse-fail "unparsed characters remain")))
+      (else stream)))
+  parser)
+
+
 
 ;;(def (parse-sub-expression)
 ;;;; Todo: need to check if starts with '( and ends with ')
@@ -189,9 +206,33 @@
 ;; I'm thinking I need to make a little library that can help split up an input-sream... can start it as
 ;; just a split function -- key is wrap the result in input-stream.  Just make that and unit test it to get started
 
+
+;;(def (parse-binary-exp-alternate operator)
+;;  (def (parser stream)
+;;    (let-values ((left-stream right-stream) (split-stream operator))
+;;      (if (and left-stream right-stream)
+;;        (let* ((exp-parser (parse-expression))
+;;               (left-result (exp-parser left-stream))
+;;               (right-result (exp-parser right-stream)))
+;;          (if (and (parse-stream? left-result) (parse-stream? right-result))
+;;            (make-parse-stream
+;;             (cons
+;;              (make-binary-exp (parse-stream-parse-tree left-result) operator (parse-stream-parse-tree right-result))
+;;              (parse-stream-parse-tree stream))
+;;             '() ;; not sure what to put here for final input stream?
+;;             )
+;;            (make-parse-fail "could not parse binary expression")))
+;;        (make-parse-fail "could not parse binary expression"))))
+;;    parser)
+
+
+
 (def (parse-binary-exp operators)
   (let* ((parser-builder (lambda ()
-                           (parse-pipeline [(parse-expression) (parse-any-char operators) (parse-expression)])))
+                           (parse-pipeline [
+                                            (parse-expression)
+                                            (parse-any-char operators)
+                                            (parse-expression #f)])))
          (on-success-node-builder (lambda (parse-sub-tree)
                                     (let ((left-operand (car (cdr (cdr parse-sub-tree))))
                                           (operator (car (cdr parse-sub-tree)))
@@ -278,7 +319,7 @@
   parser)
 
 ;; todo: parse the string between quotes
-;; todo: parse anything between the quotes
+ ;; todo: parse anything between the quotes
 (def (parse-string str)
   (def (parser stream)
 
@@ -493,3 +534,13 @@
   "converts a number represented by list of digit characters to the actual number value"
   (string->number
    (list->string digit-list)))
+
+
+;;(def (split-parse-stream stream char)
+ ;; (match stream
+  ;;  ((parse-stream parse-tree input-stream)
+   ;;  (let-values (((before after) (split-list input-stream char)))
+    ;;   (if (pair? before)
+     ;;    (values (make-parse-stream '() before) (make-parse-stream '() after))
+      ;;   #f)
+;;     (else #f)))))
