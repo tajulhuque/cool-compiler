@@ -169,43 +169,6 @@
 
 
 
-;;(def (parse-sub-expression)
-;;;; Todo: need to check if starts with '( and ends with ')
-;;;; thinking to start with constraint that sub-expressions need to be in parenthesis
-;;;;
-;;;; 7/27/23: Current plan is parse sub expressions and return them as
-;;;; "sub-expression type" that captures the sub expression unparsed.
-;;;; Then hoping to traverse the tree again on subsequent passes to parse out
-;;;; inner sub-expressions... not sure if that will work though.  This came up
-;;;; after realizing that cannot expresses my parser function builders (ctors)
-;;;; recursively ... not sure if there is maybe away to rely on lazy mechanism to do that though...
-
-;; NOW with this one... the recursive definition aspect
-;; starts to unfold! Expressions referring to Expressions!
-;;We are getting deep now, mechanism of pushing, and popping
-;;to construct node on tree is really put to the test now here.
-;;We can't just do parse-tree-to-node here.
-;;There are THREE Seperate results parse results to look for here.
-;;LEFT EXP, OP, RIGHT EXP
-
-
-;; TODO: 11/15/23: Latest Idea I had over the summer
-;; was that I need to first break the input into pieces.
-;; A piece for the left side and the right side.
-;; First step would be to see if the input has operators (return failured if not)
-;; then, split up the stream by the operator to get the left and ride sides...
-;; get them as input-stream!  Then, run parse-expression on each of the left
-;; and right side and get their results, if either of them fail then deal with it,
-;; otherwise stitch each of their results into a binary-exp to return!
-;; NOTE: In my original vision I saw my parsers being strung together in such a way
-;; that I would never have to slice and dice the input like that, but it seems
-;; like I must do that, beause for example if I have a parse-expression run on <left>+<right> input,
-;; I'm not sure how to make only parse <left> and not go too far.  I got really stuck on questions like that
-;; and then realized I probably need to adjust my vision and instead give the parsers more focused input.
-;; *** To Begin ***
-;; I'm thinking I need to make a little library that can help split up an input-sream... can start it as
-;; just a split function -- key is wrap the result in input-stream.  Just make that and unit test it to get started
-
 
 ;;(def (parse-binary-exp-alternate operator)
 ;;  (def (parser stream)
