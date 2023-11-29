@@ -1,6 +1,7 @@
 #!/usr/bin/env gxi
 
 (import "parser_library")
+(import "parse_types")
 
 (def (main . args)
   (binary-exp-parse-test))

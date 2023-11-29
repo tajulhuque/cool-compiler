@@ -1,132 +1,32 @@
 
-
 (export parse-expression)
 (export parse-binary-exp)
 (export parse-integer)
 (export parse-identifier)
 (export parse-string)
 (export run-parser)
-(export parse-stream)
-(export make-parse-stream)
-(export parse-fail)
-(export make-parse-fail)
 (export parse-empty)
 
-(import "utils")
-
-;; Main structures ;;;;;;;;;;;;;
-
-;; Parse "stream": tree we are building up along with frontier of unparsed characters.
-;; It feels awkward that I have parse-tree and input-stream in the same structure.
-;; Scheme does have (values) where you can return multiple results from functions,
-;; but for simplicity I want to stay away from them.  What I'm thinking to
-;; do is rename this as "parse-progress" -- I think that captures what
-;; it is all about better.  I like the word "frontier" that is used in the literature, too; the
-;; charaters that are still left to consume, so I may rename "input-stream" to char-frontier, input-frontier,
-;; or something like that.  "input-stream" might be good enough though.  But I really like parse-progress
-;; for the name of the structure
-(defstruct parse-stream (parse-tree input-stream))
-
-
-;; Structure to return when a parse fails.
-;; 9/17/22: Error reporting still needs some proving out
-(defstruct parse-fail (msg))
-
-;; parse-to-types
-(defstruct expression (exp))
-(defstruct sub-expression (exp))
-(defstruct int-literal (value))
-(defstruct string-literal (value))
-(defstruct identifier (name))
-(defstruct binary-exp (left-exp op right-exp))
-
-;; Visualizers
-
-(def (print-parse-tree-stack tree-stack)
-  (print-parse-tree-node (car tree-stack) 0 "")
-  (displayln))
-
-(def (print-node type-label value-printer)
-    (display type-label)
-    (display ": ")
-    ;;(display "<")
-    (value-printer))
-    ;;(display ">"))
-
-(def (print-simple-node type-label value)
-  (print-node type-label
-              (lambda ()
-                (display value))))
-
-(def (print-parse-tree-node node level tag)
-
-  (displayln)
-
-  (let loop ((n 0))
-    (if (< n level)
-      (begin
-        (display "  ")
-        (loop (1+ n)))))
-
-  (when (> (string-length tag) 0)
-    (display tag)
-    (display ": "))
-
-  (match node
-    ((int-literal value) (print-simple-node "INT" value))
-    ((string-literal value) (print-simple-node "STRING" value))
-    ((identifier name) (print-simple-node "ID" name))
-    ((binary-exp left-exp op right-exp)
-     (print-node "BINARY-EXP"
-                 (lambda ()
-                   (print-parse-tree-node left-exp (+ 1 level) "L")
-                   (print-parse-tree-node op (+ 1 level) "Op")
-                   (print-parse-tree-node right-exp (+ 1 level) "R"))))
-    ((expression exp)
-     (print-node "EXP"
-                 (lambda ()
-                   (print-parse-tree-node exp (+ 1 level) ""))))
-    ((sub-expression sub-exp) (print-simple-node "SUBEXP" sub-exp))
-    (else (display node))))
-
-
-;; 09/18/2022: Starting to get to the point where I need to learn
-;; Gerbil/Gambit's debugging support.  Need a stacktrace at present.
-
-
+(import "parse_types")
 
 ;; Parser Runner ;;;;;;;;;
 ;;
 (def (run-parser parser stream)
+  (displayln "initial input stream: " (parse-stream-input-stream stream))
   (let (parse-result (parser stream))
-    (displayln parse-result)
     (match parse-result
       ((parse-stream parse-tree input-stream)
        (begin
         (displayln "SUCCESSFUL PARSE")
-        (displayln "Final Parse Progress Result: (tree, input)")
-        (displayln parse-tree)
-        (displayln input-stream)
-        (displayln "Parse Tree: ")
-        (print-parse-tree-stack parse-tree))
-        (displayln ""))
+        (displayln "input stream after parse: " input-stream)
+        (displayln "parse tree result: " parse-tree)
+       (displayln "")))
       ((parse-fail msg)
        (displayln "PARSE FAIL.  Error Message: ")
        (displayln msg))
       (else (displayln "unknown result") "error"))))
 
 
-
-;; Debugging Utilities ;;;;;;;;;;;;;;;
-(def (trace-msg msg stream)
-  (displayln msg)
-  (match stream
-    ((parse-stream tree input-stream)
-     (displayln "Tree: ")
-     (displayln tree)
-     (displayln "Input: ")
-     (displayln input-stream)
-     (displayln ""))))
 
 ;; Start Of Parser "Library" ;;;;;;;;;
 
@@ -147,7 +47,7 @@
                                            (parse-pipeline [(parse-terminal) (parse-empty)])
                                            (parse-pipeline [(parse-binary-exp [#\+ #\- #\*]) (parse-empty)]))))))
         (on-success-node-builder  (lambda (parse-result-tree)
-                                    (make-expression (car parse-result-tree))))
+                                    (make-expr (car parse-result-tree))))
         (on-fail-message "failed to parse expression"))
     (make-parser "parse-exp" parser-builder on-success-node-builder on-fail-message)))
 
@@ -200,7 +100,7 @@
                                     (let ((left-operand (car (cdr (cdr parse-sub-tree))))
                                           (operator (car (cdr parse-sub-tree)))
                                           (right-operand (car parse-sub-tree)))
-                                      (make-binary-exp left-operand operator right-operand))))
+                                      (make-arithmetic-expr left-operand operator right-operand))))
          (on-fail-message "failed to parse binary expression"))
     (make-parser "parse-binary-exp" parser-builder on-success-node-builder on-fail-message)))
 
@@ -211,7 +111,7 @@
                           (parse-pipeline [(parse-valid-identifier-non-digit-char)
                                            (parser-repeat (parse-valid-identifier-char))])))
         (on-success-node-builder  (lambda (parse-tree)
-                                    (make-identifier (list->string (reverse parse-tree)))))
+                                    (make-identifier-expr (list->string (reverse parse-tree)))))
         (on-fail-message "failed to parse identifier"))
     (make-parser "parse-identifier" parser-builder on-success-node-builder on-fail-message)))
 
@@ -275,7 +175,7 @@
       (match digits-parse-result
         ((parse-stream parse-tree input-stream) (make-parse-stream
                                                  (cons
-                                                  (make-int-literal (digit-list->number (reverse parse-tree)))
+                                                  (make-integer-expr (digit-list->number (reverse parse-tree)))
                                                   (parse-stream-parse-tree stream))
                                                  input-stream))
         (else (make-parse-fail "failed to parse integer")))))
@@ -296,7 +196,7 @@
       (match string-parser-result
         ((parse-stream parse-tree input-stream) (make-parse-stream
                                                  (cons
-                                                  (make-string-literal (list->string (reverse parse-tree)))
+                                                  (make-string-expr (list->string (reverse parse-tree)))
                                                   (parse-stream-parse-tree stream))
                                                  input-stream))
         (else (make-parse-fail (string-append "failed to parse string" str))))))
@@ -507,3 +407,14 @@
      ;;    (values (make-parse-stream '() before) (make-parse-stream '() after))
       ;;   #f)
 ;;     (else #f)))))
+
+;; Debugging Utilities ;;;;;;;;;;;;;;;
+(def (trace-msg msg stream)
+  (displayln msg)
+  (match stream
+    ((parse-stream tree input-stream)
+     (displayln "Tree: ")
+     (displayln tree)
+     (displayln "Input: ")
+     (displayln input-stream)
+     (displayln ""))))
