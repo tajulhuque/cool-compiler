@@ -40,7 +40,7 @@
 ;; General expression
 ;;
 (def (make-expr expr)
-  (apply list 'expr expr))
+  (list 'expr expr))
 
 (def (expr? expr)
   (eq? (car expr) 'expr))
@@ -48,7 +48,7 @@
 ;; Arithmetic expression
 ;;
 (def (make-arithmetic-expr left op right)
-  (apply list 'arith '(left op right)))
+  (list 'arith-expr left op right))
 
 (def (arithmetic-expr? expr)
   (eq? (car expr) 'arith))
@@ -56,7 +56,7 @@
 ;; Identifier xxpression
 
 (def (make-identifier-expr expr)
-  (apply list 'ident expr))
+  (list 'ident expr))
 
 (def (identifier-expr? expr)
   (eq? (car expr) 'ident))
@@ -64,13 +64,13 @@
 ;; Integer literal expression
 
 (def (make-integer-expr expr)
-  (apply list 'int expr))
+  (list 'int expr))
 
 (def (integer-expr? expr)
   (eq? (car expr) 'int))
 
 (def (make-string-expr expr)
-  (apply list 'string expr))
+  (list 'string expr))
 
 (def (string-expr? expr)
   (eq? (car expr) 'string))
