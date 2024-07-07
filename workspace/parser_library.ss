@@ -1,11 +1,13 @@
 
 (export parse-expression)
+(export parse-if-expr)
 (export parse-binary-exp)
 (export parse-integer)
 (export parse-identifier)
 (export parse-string)
 (export run-parser)
-(export parse-empty)
+(export peek-empty)
+(export peek-phrase)
 
 (import "parse_types")
 
@@ -36,38 +38,82 @@
 ;; this "library" module... but abstracting out of specific
 ;; vs general domain will come much later... not at that state yet.
 ;;
-;;
-(def (parse-expression (greedy #t))
+
+(def (get-binary-operators)
+  (list #\+ #\- #\* #\> #\< #\=))
+
+
+(def (parse-expression (greedy #t) (followed-by (peek-empty)))
+  (displayln "followed by is: ")
+  (displayln followed-by)
   (let ((parser-builder (lambda ()
                           (parse-any-of (if greedy
                                           (list
                                            (parse-terminal)
-                                           (parse-binary-exp [#\+ #\- #\*]))
+                                           (parse-binary-exp (get-binary-operators)))
                                           (list
-                                           (parse-pipeline [(parse-terminal) (parse-empty)])
-                                           (parse-pipeline [(parse-binary-exp [#\+ #\- #\*]) (parse-empty)]))))))
+                                           (parse-pipeline (list (parse-terminal) followed-by))
+                                           (parse-pipeline (list (parse-binary-exp (get-binary-operators)) followed-by)))))))
         (on-success-node-builder  (lambda (parse-result-tree)
-                                    (make-expr (car parse-result-tree))))
+                                    (car parse-result-tree)))
         (on-fail-message "failed to parse expression"))
     (make-parser "parse-exp" parser-builder on-success-node-builder on-fail-message)))
 
 
+(def (parse-expression-followed-by parser)
+  (displayln "parser is: ")
+  (displayln parser)
+  (parse-expression #f parser))
+
+(def (parse-if-expr)
+  (let* ((parser-builder (lambda ()
+                           (parse-pipeline
+                            [
+                             (parse-phrase "If")
+                             (parse-expression-followed-by (peek-phrase "Then"))
+                             (parse-phrase "Then")
+                             (parse-expression-followed-by (peek-phrase "Else"))
+                             (parse-phrase "Else")
+                             (parse-expression-followed-by (peek-phrase "Fi"))
+                             (parse-phrase "Fi")
+                             ])))
+
+         ;; Hmmm: how to pluck out the test, true path, and then false path out of the temporary sub-tree?
+         (on-success-node-builder (lambda (parse-sub-tree)
+                                    parse-sub-tree ;; just return the sub-tree for now so we can alayze what to do
+                                    ))
+         (on-fail-message "failed to parse if-expression"))
+    (make-parser "parse-if-exp" parser-builder on-success-node-builder on-fail-message)))
+
+
+
 (def (parse-terminal)
   (let ((parser-builder (lambda () (parse-any-of [(parse-integer) (parse-identifier)])))
-        (on-success-node-builder  (lambda (terminal) terminal))
+        (on-success-node-builder  (lambda (terminal) (displayln "parsed terminal" terminal) terminal))
         (on-fail-message "failed to parse terminal"))
     (make-parser "parse-terminal" parser-builder on-success-node-builder on-fail-message)))
 
-(def (parse-empty)
-  (def (parser stream)
+;; need to rename maybe to "peek empty"... maybe a naming convention for functions
+;; that just "peek" at the input frontier without actually consuming it
+(def (peek-empty)
+  (def (peeker stream)
     (match stream
       ((parse-stream parse-tree input-stream) (if (null? input-stream)
                                                stream
                                                (make-parse-fail "unparsed characters remain")))
       (else stream)))
-  parser)
+  peeker)
 
-
+(def (peek-phrase phrase)
+  (displayln phrase)
+  (def (peeker stream)
+    (let (phrase-parser (parse-phrase phrase))
+      (let (phrase-parse-result (phrase-parser stream))
+        (match phrase-parse-result
+        ;; PEEK: upon "parse" success, just return the original stream, leaving the input frontier un-consumed
+          ((parse-stream parse-tree input-stream) stream)
+          (make-parse-fail (string-append "did not find expected phrase" phrase))))))
+  peeker)
 
 
 ;;(def (parse-binary-exp-alternate operator)
@@ -147,6 +193,7 @@
                                                   (on-success-node-builder parse-tree)
                                                   (parse-stream-parse-tree stream))
                                                  input-stream))
+        ((parse-fail msg) (make-parse-fail (string-append on-failure-message ": " msg)))
         (else (make-parse-fail on-failure-message)))))
   new-parser)
 
@@ -181,8 +228,10 @@
         (else (make-parse-fail "failed to parse integer")))))
   parser)
 
-;; todo: parse the string between quotes
- ;; todo: parse anything between the quotes
+
+
+
+
 (def (parse-string str)
   (def (parser stream)
 
@@ -200,6 +249,29 @@
                                                   (parse-stream-parse-tree stream))
                                                  input-stream))
         (else (make-parse-fail (string-append "failed to parse string" str))))))
+  parser)
+
+;; Later; Need to sort out parse-string vs parse text.
+;; Shouldn't "parse string reuse parse-phrase somehow -- just enclose parse-phrase's results
+;; in quotes?  Note that parse-phrase (without quotes) is very useful for for just parsing
+;; out simple unquoted keywords like "If, Loop" etc.
+
+
+(def (parse-phrase str)
+  (def (parser stream)
+
+    (let* ((str-chars (string->list str))
+           (characters-parser (parse-pipeline (map parse-char str-chars)))
+           (sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
+           (string-parser-result (characters-parser sub-tree-stream)))
+      (match string-parser-result
+        ((parse-stream parse-tree input-stream) (make-parse-stream
+                                                 (cons
+                                                  (make-string-expr (list->string (reverse parse-tree)))
+                                                  (parse-stream-parse-tree stream))
+                                                 input-stream))
+        ((parse-fail msg) (make-parse-fail (string-append "failed to parse phrase:" str " - Error: " msg)))
+        (else (make-parse-fail (string-append "failed to parse phrase:" str))))))
   parser)
 
 
@@ -227,7 +299,7 @@
        (if (and (not (null? input-stream))
                 (equal? (car input-stream) char))
          (make-parse-stream (cons char parse-tree) (cdr input-stream))
-         (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char)))))
+         (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char) ", but got " (string (car input-stream))))))
       (else (make-parse-fail ""))))
 
   parser)
@@ -250,9 +322,12 @@
 ;; Going with the coupled version for now...
 
 (def (parse-pipeline parsers)
+  (displayln "pipeline")
   (parser-combine parsers parser-compose-follow))
 
 (def (parse-any-of parsers)
+  (displayln "any-off")
+  (displayln parsers)
   (parser-combine parsers parser-compose-alternate))
 
 ;; todo: parser-combine need to make safe if passed 1 parser?

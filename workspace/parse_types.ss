@@ -45,6 +45,14 @@
 (def (expr? expr)
   (eq? (car expr) 'expr))
 
+;; If Expression
+
+(def (make-if-expr test true-path false-path)
+  (list 'if-expr test true-path false-path))
+
+(def (if-expr? expr)
+  (eq? (car expr) 'if-expr))
+
 ;; Arithmetic expression
 ;;
 (def (make-arithmetic-expr left op right)
@@ -74,6 +82,7 @@
 
 (def (string-expr? expr)
   (eq? (car expr) 'string))
+
 
 
 ;; parse-to-types previously as structs

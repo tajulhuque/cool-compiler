@@ -4,7 +4,24 @@
 (import "parse_types")
 
 (def (main . args)
-  (binary-exp-parse-test))
+  (if-exp-parse-test))
+ ;; (binary-exp-parse-test))
+
+
+(def (if-exp-parse-test)
+  (let* ((parser (parse-if-expr))
+         (input (string->list "If55=22Then13ElseABCFi"))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+
+(def (peek-phrase-test)
+  (let* ((peeker (peek-phrase "If"))
+         (input (string->list "If"))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser peeker parse-stream)))
 
 
 (def (binary-exp-parse-test)
@@ -16,7 +33,7 @@
 
 
 (def (empty-parse-test)
-  (let* ((parser (parse-empty))
+  (let* ((parser (peek-empty))
          (input (string->list "a"))
          (parse-tree '())
          (parse-stream (make-parse-stream parse-tree input)))
