@@ -44,8 +44,6 @@
 
 
 (def (parse-expression (greedy #t) (followed-by (peek-empty)))
-  (displayln "followed by is: ")
-  (displayln followed-by)
   (let ((parser-builder (lambda ()
                           (parse-any-of (if greedy
                                           (list
@@ -61,8 +59,6 @@
 
 
 (def (parse-expression-followed-by parser)
-  (displayln "parser is: ")
-  (displayln parser)
   (parse-expression #f parser))
 
 (def (parse-if-expr)
@@ -89,7 +85,7 @@
 
 (def (parse-terminal)
   (let ((parser-builder (lambda () (parse-any-of [(parse-integer) (parse-identifier)])))
-        (on-success-node-builder  (lambda (terminal) (displayln "parsed terminal" terminal) terminal))
+        (on-success-node-builder  (lambda (terminal) terminal))
         (on-fail-message "failed to parse terminal"))
     (make-parser "parse-terminal" parser-builder on-success-node-builder on-fail-message)))
 
@@ -141,7 +137,7 @@
                            (parse-pipeline [
                                             (parse-expression)
                                             (parse-any-char operators)
-                                            (parse-expression #f)])))
+                                            (parse-expression)])))
          (on-success-node-builder (lambda (parse-sub-tree)
                                     (let ((left-operand (car (cdr (cdr parse-sub-tree))))
                                           (operator (car (cdr parse-sub-tree)))
@@ -180,19 +176,20 @@
 
 (def (make-parser name parser-builder on-success-node-builder on-failure-message)
   (def (new-parser stream)
-    (trace-msg (string-append "running " name) stream)
-    (display (parse-stream-input-stream stream))
-    (displayln)
-    (displayln)
+    (displayln (string-append "running " name))
+    (when (equal? name "parse-exp")
+      (displayln "on input: ")
+      (displayln (parse-stream-input-stream stream)))
     (let* ((sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
            (parser (parser-builder))
            (sub-tree-parse-result (parser sub-tree-stream)))
       (match sub-tree-parse-result
-        ((parse-stream parse-tree input-stream) (make-parse-stream
-                                                 (cons
-                                                  (on-success-node-builder parse-tree)
-                                                  (parse-stream-parse-tree stream))
-                                                 input-stream))
+        ((parse-stream parse-tree input-stream) (begin (trace-msg (string-append name " success. Result:") sub-tree-parse-result)
+                                                       (make-parse-stream
+                                                        (cons
+                                                         (on-success-node-builder parse-tree)
+                                                         (parse-stream-parse-tree stream))
+                                                        input-stream)))
         ((parse-fail msg) (make-parse-fail (string-append on-failure-message ": " msg)))
         (else (make-parse-fail on-failure-message)))))
   new-parser)
@@ -215,16 +212,18 @@
 
 (def (parse-integer)
   (def (parser stream)
-    (trace-msg "running parse-integer" stream)
+    (displayln (string-append "running parse-integer"))
     (let* ((digits-parser (parser-repeat (parse-digit)))
            (digits-parse-stream (make-parse-stream '() (parse-stream-input-stream stream)))
            (digits-parse-result (digits-parser digits-parse-stream)))
       (match digits-parse-result
-        ((parse-stream parse-tree input-stream) (make-parse-stream
-                                                 (cons
-                                                  (make-integer-expr (digit-list->number (reverse parse-tree)))
-                                                  (parse-stream-parse-tree stream))
-                                                 input-stream))
+        ((parse-stream parse-tree input-stream) (begin
+                                                  (trace-msg "parse-integer success. Result:" digits-parse-result)
+                                                  (make-parse-stream
+                                                   (cons
+                                                    (make-integer-expr (digit-list->number (reverse parse-tree)))
+                                                    (parse-stream-parse-tree stream))
+                                                   input-stream)))
         (else (make-parse-fail "failed to parse integer")))))
   parser)
 
@@ -322,12 +321,9 @@
 ;; Going with the coupled version for now...
 
 (def (parse-pipeline parsers)
-  (displayln "pipeline")
   (parser-combine parsers parser-compose-follow))
 
 (def (parse-any-of parsers)
-  (displayln "any-off")
-  (displayln parsers)
   (parser-combine parsers parser-compose-alternate))
 
 ;; todo: parser-combine need to make safe if passed 1 parser?
