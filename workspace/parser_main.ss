@@ -10,7 +10,10 @@
 
 (def (if-exp-parse-test)
   (let* ((parser (parse-if-expr))
-         (input (string->list "If55=22Then13ElseABCFi"))
+         (input (string->list "If55=22Then13Else55Fi"))
+     ;;    (input (string->list "If55=22Then13ElseABCFi"))
+     ;;    ABC and Fi get parsed together as one identifier.
+     ;;    Need to introduce whitespace?
          (parse-tree '())
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
