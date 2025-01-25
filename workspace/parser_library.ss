@@ -74,10 +74,16 @@
                              (parse-phrase "Fi")
                              ])))
 
-         ;; Hmmm: how to pluck out the test, true path, and then false path out of the temporary sub-tree?
+         ;; Hmmm: how are we gonna do if expressions that don't have the alternate part?
+         ;;
          (on-success-node-builder (lambda (parse-sub-tree)
-                                    parse-sub-tree ;; just return the sub-tree for now so we can alayze what to do
-                                    ))
+                                    (let ((raw-if-parts (reverse parse-sub-tree)))
+                                      (make-if-expr
+                                       (list-ref raw-if-parts 1) ; predicate
+                                       (list-ref raw-if-parts 3) ; consequent
+                                       (list-ref raw-if-parts 5)) ; alternate
+                                      )))
+
          (on-fail-message "failed to parse if-expression"))
     (make-parser "parse-if-exp" parser-builder on-success-node-builder on-fail-message)))
 

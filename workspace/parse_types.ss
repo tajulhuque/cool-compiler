@@ -17,6 +17,8 @@
 (export integer-expr?)
 (export make-string-expr)
 (export string-expr?)
+(export make-if-expr)
+(export if-expr?)
 
 
 
@@ -47,11 +49,16 @@
 
 ;; If Expression
 
-(def (make-if-expr test true-path false-path)
-  (list 'if-expr test true-path false-path))
+;;;; Do we need seperate sub-types for predicate, consequent, and alternate?
+
+(def (make-if-expr predicate consequent alternate)
+  (list 'if-expr (list 'if-exp-pred predicate) (list 'if-exp-conseq consequent) (list 'if-exp-alt alternate)))
 
 (def (if-expr? expr)
   (eq? (car expr) 'if-expr))
+
+
+
 
 ;; Arithmetic expression
 ;;
