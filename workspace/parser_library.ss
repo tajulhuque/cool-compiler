@@ -51,7 +51,7 @@
                                            (parse-binary-exp (get-binary-operators)))
                                           (list
                                            (parse-pipeline (list (parse-terminal) followed-by))
-                                           (parse-pipeline (list (parse-binary-exp (get-binary-operators)) followed-by)))))))
+                                           (parse-binary-exp (get-binary-operators) #f followed-by))))))
         (on-success-node-builder  (lambda (parse-result-tree)
                                     (car parse-result-tree)))
         (on-fail-message "failed to parse expression"))
@@ -132,12 +132,12 @@
 
 
 
-(def (parse-binary-exp operators)
+(def (parse-binary-exp operators (greedy #t) (followed-by (peek-empty)))
   (let* ((parser-builder (lambda ()
                            (parse-pipeline [
                                             (parse-expression)
                                             (parse-any-char operators)
-                                            (parse-expression)])))
+                                            (parse-expression greedy followed-by)])))
          (on-success-node-builder (lambda (parse-sub-tree)
                                     (let ((left-operand (car (cdr (cdr parse-sub-tree))))
                                           (operator (car (cdr parse-sub-tree)))
