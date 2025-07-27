@@ -279,6 +279,23 @@
         (else (make-parse-fail (string-append "failed to parse phrase:" str))))))
   parser)
 
+;; March, 2025:  Contemplating a "parse-keyword"
+;; so that can incomporate white-space rules.  A keyword should be expected to have
+;; some kind of whitespace separator between it and other syntax.
+;; Start simple:  "A keyword must have some whitespace immediately before and after".
+;; Then can relax later (requiring ws in front of "If" for example is kinda silly?),
+;; but mabye not, we expect expressions to be embedded in some other context / expression
+;; Current plan:
+;;   - use parser-repeat to make a "parse-whitespace"
+;;   - then make a "parse-keyword" which will sanwhich a parse-phrase
+;;   - between to "parse-whitespace"s (so use parse-pipeline to combine all three)
+;;   - you'll need to update "peek" functions to "peek through / past" whitespace
+;;     (probably you can have --or return-- another representation of the input frontier
+;;     that is all the whitespace characters stripped away? , or when peeking ahead, then strip away?)
+;;
+;    - start a "conessions" / "limitations" list (you can commit it to guest)
+;    ("keywords must have some sourrounding whitespace", would be the first item, but might be others you can think of)
+
 
 (def (parse-digit)
   (parse-any-char (string->list "0123456789")))
