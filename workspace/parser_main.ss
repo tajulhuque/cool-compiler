@@ -4,9 +4,16 @@
 (import "parse_types")
 
 (def (main . args)
-  (if-exp-parse-test))
+  (parse-ws-test))
  ;; (binary-exp-parse-test))
 
+
+(def (parse-ws-test)
+  (let* ((parser (parse-ws))
+         (input (string->list "  "))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
 
 (def (if-exp-parse-test)
   (let* ((parser (parse-if-expr))
