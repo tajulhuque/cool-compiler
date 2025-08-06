@@ -9,6 +9,7 @@
 (export peek-empty)
 (export peek-phrase)
 (export parse-ws)
+(export parse-keyword)
 
 (import "parse_types")
 
@@ -296,6 +297,10 @@
 ;;
 ;    - start a "conessions" / "limitations" list (you can commit it to guest)
 ;    ("keywords must have some sourrounding whitespace", would be the first item, but might be others you can think of)
+
+(define (parse-keyword keyword)
+  (parse-pipeline (list
+                   (parse-ws) (parse-phrase keyword) (parse-ws))))
 
 (define (parse-ws)
   (let ((parse-ws-char (parse-any-char (list #\space #\tab #\newline))))

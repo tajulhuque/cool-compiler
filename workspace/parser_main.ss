@@ -4,9 +4,16 @@
 (import "parse_types")
 
 (def (main . args)
-  (parse-ws-test))
+  (parse-keyword-test))
  ;; (binary-exp-parse-test))
 
+(def (parse-keyword-test)
+  (let* ((parser (parse-keyword "If"))
+         (input (string->list " If  "))
+        ;; (input (string->list " If ")) BUG: need to fix this case where only one instance of WS is blowing up
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
 
 (def (parse-ws-test)
   (let* ((parser (parse-ws))
