@@ -4,7 +4,8 @@
 (import "parse_types")
 
 (def (main . args)
-  (parse-keyword-test))
+ (peek-phrase-test))
+ ;; (parse-keyword-test))
  ;; (binary-exp-parse-test))
 
 (def (parse-keyword-test)
@@ -31,6 +32,15 @@
          (parse-tree '())
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
+
+
+(def (peek-phrase-test2)
+  (let* ((peeker (peek-phrase2 "If"))
+         (input (string->list "If"))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser peeker parse-stream)))
+
 
 
 (def (peek-phrase-test)

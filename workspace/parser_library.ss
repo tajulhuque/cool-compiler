@@ -108,17 +108,20 @@
       (else stream)))
   peeker)
 
-(def (peek-phrase phrase)
-  (displayln phrase)
-  (def (peeker stream)
-    (let (phrase-parser (parse-phrase phrase))
-      (let (phrase-parse-result (phrase-parser stream))
-        (match phrase-parse-result
-        ;; PEEK: upon "parse" success, just return the original stream, leaving the input frontier un-consumed
-          ((parse-stream parse-tree input-stream) stream)
-          (make-parse-fail (string-append "did not find expected phrase" phrase))))))
+;; general "peek" adapter function
+(define (peek parser)
+  (define (peeker stream)
+    (let (parse-result (parser stream))
+      (match parse-result
+        ((parse-stream parse-tree input-stream) stream) ;; PEEK: upon "parse" success, just return the original stream, leaving the input frontier un-consumed
+        (else parse-result) ;; otherwise return value result
+        )))
   peeker)
 
+
+(define (peek-phrase phrase)
+  (let (phrase-parser (parse-phrase phrase))
+    (peek phrase-parser)))
 
 ;;(def (parse-binary-exp-alternate operator)
 ;;  (def (parser stream)
@@ -297,14 +300,14 @@
 ;;
 ;    - start a "conessions" / "limitations" list (you can commit it to guest)
 ;    ("keywords must have some sourrounding whitespace", would be the first item, but might be others you can think of)
-
 (define (parse-keyword keyword)
-  (parse-pipeline (list
-                   (parse-ws) (parse-phrase keyword) (parse-ws))))
+  (parse-pipeline
+   (list (parse-ws) (parse-phrase keyword) (parse-ws))))
 
 (define (parse-ws)
   (let ((parse-ws-char (parse-any-char (list #\space #\tab #\newline))))
     (parser-repeat parse-ws-char)))
+
 
 (def (parse-digit)
   (parse-any-char (string->list "0123456789")))
