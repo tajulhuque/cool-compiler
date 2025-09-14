@@ -9,9 +9,28 @@
   (load "parser_main.ss"))
 
 (def (main . args)
- (if-exp-parse-test-keyword-ws))
+ (if-exp-parse-test-keyword-ws2))
  ;; (parse-keyword-test))
  ;; (binary-exp-parse-test))
+
+(def (if-exp-parse-test-keyword-ws2)
+  (let* ((parser (parse-if-expr))
+         (input (string->list "
+If 55=22
+  Then 13
+  Else 55
+Fi "))  ;; WORKS!
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+(def (if-exp-parse-test-keyword-ws3) ;;BROKE! (not related to ws)
+  (let* ((parser (parse-if-expr))
+         (input (string->list " If gixmo=19 Then x Else y Fi "))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
 
 (def (if-exp-parse-test-keyword-ws)
   (let* ((parser (parse-if-expr))
