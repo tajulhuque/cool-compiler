@@ -4,10 +4,8 @@
 (export parse-binary-exp)
 (export parse-integer)
 (export parse-identifier)
-(export parse-string)
 (export run-parser)
 (export peek-empty)
-(export peek-phrase)
 (export parse-ws)
 (export parse-keyword)
 
@@ -67,19 +65,23 @@
   (let* ((parser-builder (lambda ()
                            (parse-pipeline
                             [
-                             (parse-phrase "If")
-                             (parse-expression-followed-by (peek-phrase "Then"))
-                             (parse-phrase "Then")
-                             (parse-expression-followed-by (peek-phrase "Else"))
-                             (parse-phrase "Else")
-                             (parse-expression-followed-by (peek-phrase "Fi"))
-                             (parse-phrase "Fi")
+                             (parse-keyword "If")
+                             (parse-expression-followed-by (peek-keyword "Then"))
+                             (parse-keyword "Then")
+                             (parse-expression-followed-by (peek-keyword "Else"))
+                             (parse-keyword "Else")
+                             (parse-expression-followed-by (peek-keyword "Fi"))
+                             (parse-keyword "Fi")
                              ])))
 
          ;; Hmmm: how are we gonna do if expressions that don't have the alternate part?
          ;;
          (on-success-node-builder (lambda (parse-sub-tree)
                                     (let ((raw-if-parts (reverse parse-sub-tree)))
+                                      (displayln "raw-if-parts:")
+                                      (displayln raw-if-parts)
+                                      (displayln "first one")
+                                      (displayln (list-ref raw-if-parts 0))
                                       (make-if-expr
                                        (list-ref raw-if-parts 1) ; predicate
                                        (list-ref raw-if-parts 3) ; consequent
@@ -118,10 +120,6 @@
         )))
   peeker)
 
-
-(define (peek-phrase phrase)
-  (let (phrase-parser (parse-phrase phrase))
-    (peek phrase-parser)))
 
 ;;(def (parse-binary-exp-alternate operator)
 ;;  (def (parser stream)
@@ -215,12 +213,6 @@
 (def (parse-valid-identifier-char)
   (parse-any-char (string->list "_$-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnophijklmnopqrstuvwxyz0123456789")))
 
-(def (parse-foo-int-blah)
-  (parse-pipeline
-   [(parse-string "foo")
-    (parse-integer)
-    (parse-string "blah")]))
-
 (def (parse-integer)
   (def (parser stream)
     (displayln (string-append "running parse-integer"))
@@ -242,24 +234,6 @@
 
 
 
-(def (parse-string str)
-  (def (parser stream)
-
-    (let* ((str-chars (string->list str))
-           (characters-parser (parse-pipeline (map parse-char str-chars)))
-           (string-parser (parse-pipeline [(parse-char #\")
-                                           characters-parser
-                                           (parse-char #\")]))
-           (sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
-           (string-parser-result (string-parser sub-tree-stream)))
-      (match string-parser-result
-        ((parse-stream parse-tree input-stream) (make-parse-stream
-                                                 (cons
-                                                  (make-string-expr (list->string (reverse parse-tree)))
-                                                  (parse-stream-parse-tree stream))
-                                                 input-stream))
-        (else (make-parse-fail (string-append "failed to parse string" str))))))
-  parser)
 
 ;; Later; Need to sort out parse-string vs parse text.
 ;; Shouldn't "parse string reuse parse-phrase somehow -- just enclose parse-phrase's results
@@ -267,21 +241,21 @@
 ;; out simple unquoted keywords like "If, Loop" etc.
 
 
-(def (parse-phrase str)
+(def (parse-keyword str)
   (def (parser stream)
-
     (let* ((str-chars (string->list str))
            (characters-parser (parse-pipeline (map parse-char str-chars)))
+           (keyword-parser (parse-pipeline (list (parse-ws) characters-parser (parse-ws)))) ;; keyword: require ws on each side
            (sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
-           (string-parser-result (characters-parser sub-tree-stream)))
-      (match string-parser-result
+           (keyword-parser-result (keyword-parser sub-tree-stream)))
+      (match keyword-parser-result
         ((parse-stream parse-tree input-stream) (make-parse-stream
                                                  (cons
-                                                  (make-string-expr (list->string (reverse parse-tree)))
+                                                  (make-keyword (list->string (reverse parse-tree))) ;; TODO: strip out ws
                                                   (parse-stream-parse-tree stream))
                                                  input-stream))
-        ((parse-fail msg) (make-parse-fail (string-append "failed to parse phrase:" str " - Error: " msg)))
-        (else (make-parse-fail (string-append "failed to parse phrase:" str))))))
+        ((parse-fail msg) (make-parse-fail (string-append "failed to parse keyword:" str " - Error: " msg)))
+        (else (make-parse-fail (string-append "failed to parse keyword:" str))))))
   parser)
 
 ;; March, 2025:  Contemplating a "parse-keyword"
@@ -300,13 +274,13 @@
 ;;
 ;    - start a "conessions" / "limitations" list (you can commit it to guest)
 ;    ("keywords must have some sourrounding whitespace", would be the first item, but might be others you can think of)
-(define (parse-keyword keyword)
-  (parse-pipeline
-   (list (parse-ws) (parse-phrase keyword) (parse-ws))))
-
+;
 (define (parse-ws)
   (let ((parse-ws-char (parse-any-char (list #\space #\tab #\newline))))
     (parser-repeat parse-ws-char)))
+
+(define (peek-keyword keyword)
+  (peek (parse-keyword keyword)))
 
 
 (def (parse-digit)
@@ -333,7 +307,9 @@
        (if (and (not (null? input-stream))
                 (equal? (car input-stream) char))
          (make-parse-stream (cons char parse-tree) (cdr input-stream))
-         (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char) ", but got " (string (car input-stream))))))
+         (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char) ", but got " (if (null? input-stream)
+                                                                                                "END OF INPUT"
+                                                                                                (string (car input-stream)))))))
       (else (make-parse-fail ""))))
 
   parser)

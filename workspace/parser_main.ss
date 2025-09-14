@@ -3,10 +3,23 @@
 (import "parser_library")
 (import "parse_types")
 
+(def (loadme)
+  ;; TODO: this doesn't quite reset environment it seems,
+  ;; need some kind of (reset-environment)...
+  (load "parser_main.ss"))
+
 (def (main . args)
- (peek-phrase-test))
+ (if-exp-parse-test-keyword-ws))
  ;; (parse-keyword-test))
  ;; (binary-exp-parse-test))
+
+(def (if-exp-parse-test-keyword-ws)
+  (let* ((parser (parse-if-expr))
+         (input (string->list " If 55=22 Then 13 Else 55 Fi "))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
 
 (def (parse-keyword-test)
   (let* ((parser (parse-keyword "If"))
@@ -88,9 +101,3 @@
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
 
-(def (string-parse-test)
-  (let* ((parser (parse-string "coolness"))
-         (input (string->list "\"coolness\""))
-         (parse-tree '())
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))

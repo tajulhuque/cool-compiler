@@ -15,8 +15,8 @@
 (export identifier-expr?)
 (export make-integer-expr)
 (export integer-expr?)
-(export make-string-expr)
-(export string-expr?)
+(export make-keyword)
+(export keyword?)
 (export make-if-expr)
 (export if-expr?)
 
@@ -84,11 +84,13 @@
 (def (integer-expr? expr)
   (eq? (car expr) 'int))
 
-(def (make-string-expr expr)
-  (list 'string expr))
+;; Keywords
 
-(def (string-expr? expr)
-  (eq? (car expr) 'string))
+(def (make-keyword expr)
+  (list 'keyword expr))
+
+(def (keyword? expr)
+  (eq? (car expr) 'keyword))
 
 
 
