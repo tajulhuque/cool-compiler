@@ -15,8 +15,10 @@
 (export identifier-expr?)
 (export make-integer-expr)
 (export integer-expr?)
-(export make-string-expr)
-(export string-expr?)
+(export make-keyword)
+(export keyword?)
+(export make-if-expr)
+(export if-expr?)
 
 
 
@@ -45,6 +47,19 @@
 (def (expr? expr)
   (eq? (car expr) 'expr))
 
+;; If Expression
+
+;;;; Do we need seperate sub-types for predicate, consequent, and alternate?
+
+(def (make-if-expr predicate consequent alternate)
+  (list 'if-expr (list 'if-exp-pred predicate) (list 'if-exp-conseq consequent) (list 'if-exp-alt alternate)))
+
+(def (if-expr? expr)
+  (eq? (car expr) 'if-expr))
+
+
+
+
 ;; Arithmetic expression
 ;;
 (def (make-arithmetic-expr left op right)
@@ -69,11 +84,14 @@
 (def (integer-expr? expr)
   (eq? (car expr) 'int))
 
-(def (make-string-expr expr)
-  (list 'string expr))
+;; Keywords
 
-(def (string-expr? expr)
-  (eq? (car expr) 'string))
+(def (make-keyword expr)
+  (list 'keyword expr))
+
+(def (keyword? expr)
+  (eq? (car expr) 'keyword))
+
 
 
 ;; parse-to-types previously as structs

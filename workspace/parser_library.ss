@@ -1,11 +1,13 @@
 
 (export parse-expression)
+(export parse-if-expr)
 (export parse-binary-exp)
 (export parse-integer)
 (export parse-identifier)
-(export parse-string)
 (export run-parser)
-(export parse-empty)
+(export peek-empty)
+(export parse-ws)
+(export parse-keyword)
 
 (import "parse_types")
 
@@ -36,20 +38,59 @@
 ;; this "library" module... but abstracting out of specific
 ;; vs general domain will come much later... not at that state yet.
 ;;
-;;
-(def (parse-expression (greedy #t))
+
+(def (get-binary-operators)
+  (list #\+ #\- #\* #\> #\< #\=))
+
+
+(def (parse-expression (greedy #t) (followed-by (peek-empty)))
   (let ((parser-builder (lambda ()
                           (parse-any-of (if greedy
                                           (list
                                            (parse-terminal)
-                                           (parse-binary-exp [#\+ #\- #\*]))
+                                           (parse-binary-exp (get-binary-operators)))
                                           (list
-                                           (parse-pipeline [(parse-terminal) (parse-empty)])
-                                           (parse-pipeline [(parse-binary-exp [#\+ #\- #\*]) (parse-empty)]))))))
+                                           (parse-pipeline (list (parse-terminal) followed-by))
+                                           (parse-binary-exp (get-binary-operators) #f followed-by))))))
         (on-success-node-builder  (lambda (parse-result-tree)
-                                    (make-expr (car parse-result-tree))))
+                                    (car parse-result-tree)))
         (on-fail-message "failed to parse expression"))
     (make-parser "parse-exp" parser-builder on-success-node-builder on-fail-message)))
+
+
+(def (parse-expression-followed-by parser)
+  (parse-expression #f parser))
+
+(def (parse-if-expr)
+  (let* ((parser-builder (lambda ()
+                           (parse-pipeline
+                            [
+                             (parse-keyword "If")
+                             (parse-expression-followed-by (peek-keyword "Then"))
+                             (parse-keyword "Then")
+                             (parse-expression-followed-by (peek-keyword "Else"))
+                             (parse-keyword "Else")
+                             (parse-expression-followed-by (peek-keyword "Fi"))
+                             (parse-keyword "Fi")
+                             ])))
+
+         ;; Hmmm: how are we gonna do if expressions that don't have the alternate part?
+         ;;
+         (on-success-node-builder (lambda (parse-sub-tree)
+                                    (let ((raw-if-parts (reverse parse-sub-tree)))
+                                      (displayln "raw-if-parts:")
+                                      (displayln raw-if-parts)
+                                      (displayln "first one")
+                                      (displayln (list-ref raw-if-parts 0))
+                                      (make-if-expr
+                                       (list-ref raw-if-parts 1) ; predicate
+                                       (list-ref raw-if-parts 3) ; consequent
+                                       (list-ref raw-if-parts 5)) ; alternate
+                                      )))
+
+         (on-fail-message "failed to parse if-expression"))
+    (make-parser "parse-if-exp" parser-builder on-success-node-builder on-fail-message)))
+
 
 
 (def (parse-terminal)
@@ -58,16 +99,26 @@
         (on-fail-message "failed to parse terminal"))
     (make-parser "parse-terminal" parser-builder on-success-node-builder on-fail-message)))
 
-(def (parse-empty)
-  (def (parser stream)
+;; need to rename maybe to "peek empty"... maybe a naming convention for functions
+;; that just "peek" at the input frontier without actually consuming it
+(def (peek-empty)
+  (def (peeker stream)
     (match stream
       ((parse-stream parse-tree input-stream) (if (null? input-stream)
                                                stream
                                                (make-parse-fail "unparsed characters remain")))
       (else stream)))
-  parser)
+  peeker)
 
-
+;; general "peek" adapter function
+(define (peek parser)
+  (define (peeker stream)
+    (let (parse-result (parser stream))
+      (match parse-result
+        ((parse-stream parse-tree input-stream) stream) ;; PEEK: upon "parse" success, just return the original stream, leaving the input frontier un-consumed
+        (else parse-result) ;; otherwise return value result
+        )))
+  peeker)
 
 
 ;;(def (parse-binary-exp-alternate operator)
@@ -90,12 +141,12 @@
 
 
 
-(def (parse-binary-exp operators)
+(def (parse-binary-exp operators (greedy #t) (followed-by (peek-empty)))
   (let* ((parser-builder (lambda ()
                            (parse-pipeline [
                                             (parse-expression)
                                             (parse-any-char operators)
-                                            (parse-expression #f)])))
+                                            (parse-expression greedy followed-by)])))
          (on-success-node-builder (lambda (parse-sub-tree)
                                     (let ((left-operand (car (cdr (cdr parse-sub-tree))))
                                           (operator (car (cdr parse-sub-tree)))
@@ -134,19 +185,21 @@
 
 (def (make-parser name parser-builder on-success-node-builder on-failure-message)
   (def (new-parser stream)
-    (trace-msg (string-append "running " name) stream)
-    (display (parse-stream-input-stream stream))
-    (displayln)
-    (displayln)
+    (displayln (string-append "running " name))
+    (when (equal? name "parse-exp")
+      (displayln "on input: ")
+      (displayln (parse-stream-input-stream stream)))
     (let* ((sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
            (parser (parser-builder))
            (sub-tree-parse-result (parser sub-tree-stream)))
       (match sub-tree-parse-result
-        ((parse-stream parse-tree input-stream) (make-parse-stream
-                                                 (cons
-                                                  (on-success-node-builder parse-tree)
-                                                  (parse-stream-parse-tree stream))
-                                                 input-stream))
+        ((parse-stream parse-tree input-stream) (begin (trace-msg (string-append name " success. Result:") sub-tree-parse-result)
+                                                       (make-parse-stream
+                                                        (cons
+                                                         (on-success-node-builder parse-tree)
+                                                         (parse-stream-parse-tree stream))
+                                                        input-stream)))
+        ((parse-fail msg) (make-parse-fail (string-append on-failure-message ": " msg)))
         (else (make-parse-fail on-failure-message)))))
   new-parser)
 
@@ -160,47 +213,74 @@
 (def (parse-valid-identifier-char)
   (parse-any-char (string->list "_$-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnophijklmnopqrstuvwxyz0123456789")))
 
-(def (parse-foo-int-blah)
-  (parse-pipeline
-   [(parse-string "foo")
-    (parse-integer)
-    (parse-string "blah")]))
-
 (def (parse-integer)
   (def (parser stream)
-    (trace-msg "running parse-integer" stream)
+    (displayln (string-append "running parse-integer"))
     (let* ((digits-parser (parser-repeat (parse-digit)))
            (digits-parse-stream (make-parse-stream '() (parse-stream-input-stream stream)))
            (digits-parse-result (digits-parser digits-parse-stream)))
       (match digits-parse-result
-        ((parse-stream parse-tree input-stream) (make-parse-stream
-                                                 (cons
-                                                  (make-integer-expr (digit-list->number (reverse parse-tree)))
-                                                  (parse-stream-parse-tree stream))
-                                                 input-stream))
+        ((parse-stream parse-tree input-stream) (begin
+                                                  (trace-msg "parse-integer success. Result:" digits-parse-result)
+                                                  (make-parse-stream
+                                                   (cons
+                                                    (make-integer-expr (digit-list->number (reverse parse-tree)))
+                                                    (parse-stream-parse-tree stream))
+                                                   input-stream)))
         (else (make-parse-fail "failed to parse integer")))))
   parser)
 
-;; todo: parse the string between quotes
- ;; todo: parse anything between the quotes
-(def (parse-string str)
-  (def (parser stream)
 
+
+
+
+
+;; Later; Need to sort out parse-string vs parse text.
+;; Shouldn't "parse string reuse parse-phrase somehow -- just enclose parse-phrase's results
+;; in quotes?  Note that parse-phrase (without quotes) is very useful for for just parsing
+;; out simple unquoted keywords like "If, Loop" etc.
+
+
+(def (parse-keyword str)
+  (def (parser stream)
     (let* ((str-chars (string->list str))
            (characters-parser (parse-pipeline (map parse-char str-chars)))
-           (string-parser (parse-pipeline [(parse-char #\")
-                                           characters-parser
-                                           (parse-char #\")]))
+           (keyword-parser (parse-pipeline (list (parse-ws) characters-parser (parse-ws)))) ;; keyword: require ws on each side
            (sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
-           (string-parser-result (string-parser sub-tree-stream)))
-      (match string-parser-result
+           (keyword-parser-result (keyword-parser sub-tree-stream)))
+      (match keyword-parser-result
         ((parse-stream parse-tree input-stream) (make-parse-stream
                                                  (cons
-                                                  (make-string-expr (list->string (reverse parse-tree)))
+                                                  (make-keyword (list->string (reverse parse-tree))) ;; TODO: strip out ws
                                                   (parse-stream-parse-tree stream))
                                                  input-stream))
-        (else (make-parse-fail (string-append "failed to parse string" str))))))
+        ((parse-fail msg) (make-parse-fail (string-append "failed to parse keyword:" str " - Error: " msg)))
+        (else (make-parse-fail (string-append "failed to parse keyword:" str))))))
   parser)
+
+;; March, 2025:  Contemplating a "parse-keyword"
+;; so that can incomporate white-space rules.  A keyword should be expected to have
+;; some kind of whitespace separator between it and other syntax.
+;; Start simple:  "A keyword must have some whitespace immediately before and after".
+;; Then can relax later (requiring ws in front of "If" for example is kinda silly?),
+;; but mabye not, we expect expressions to be embedded in some other context / expression
+;; Current plan:
+;;   - use parser-repeat to make a "parse-whitespace"
+;;   - then make a "parse-keyword" which will sanwhich a parse-phrase
+;;   - between to "parse-whitespace"s (so use parse-pipeline to combine all three)
+;;   - you'll need to update "peek" functions to "peek through / past" whitespace
+;;     (probably you can have --or return-- another representation of the input frontier
+;;     that is all the whitespace characters stripped away? , or when peeking ahead, then strip away?)
+;;
+;    - start a "conessions" / "limitations" list (you can commit it to guest)
+;    ("keywords must have some sourrounding whitespace", would be the first item, but might be others you can think of)
+;
+(define (parse-ws)
+  (let ((parse-ws-char (parse-any-char (list #\space #\tab #\newline))))
+    (parser-repeat parse-ws-char)))
+
+(define (peek-keyword keyword)
+  (peek (parse-keyword keyword)))
 
 
 (def (parse-digit)
@@ -227,7 +307,9 @@
        (if (and (not (null? input-stream))
                 (equal? (car input-stream) char))
          (make-parse-stream (cons char parse-tree) (cdr input-stream))
-         (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char)))))
+         (make-parse-fail (string-append "PARSE FAIL:" "expected " (string char) ", but got " (if (null? input-stream)
+                                                                                                "END OF INPUT"
+                                                                                                (string (car input-stream)))))))
       (else (make-parse-fail ""))))
 
   parser)

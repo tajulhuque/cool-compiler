@@ -1,10 +1,66 @@
-#!/usr/bin/env gxi
+(export main)
 
 (import "parser_library")
 (import "parse_types")
 
+
 (def (main . args)
-  (binary-exp-parse-test))
+ (if-exp-parse-test-keyword-ws2))
+ ;; (parse-keyword-test))
+ ;; (binary-exp-parse-test))
+
+(def (if-exp-parse-test-keyword-ws2)
+  (let* ((parser (parse-if-expr))
+         (input (string->list "
+If 55=22
+  Then 13
+  Else 55
+Fi "))  ;; WORKS!
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+(def (if-exp-parse-test-keyword-ws3) ;;BROKE! (not related to ws)
+  (let* ((parser (parse-if-expr))
+         (input (string->list " If gixmo=19 Then x Else y Fi "))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+
+(def (if-exp-parse-test-keyword-ws)
+  (let* ((parser (parse-if-expr))
+         (input (string->list " If 55=22 Then 13 Else 55 Fi "))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+
+(def (parse-keyword-test)
+  (let* ((parser (parse-keyword "If"))
+         (input (string->list " If  "))
+        ;; (input (string->list " If ")) BUG: need to fix this case where only one instance of WS is blowing up
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+(def (parse-ws-test)
+  (let* ((parser (parse-ws))
+         (input (string->list "  "))
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
+(def (if-exp-parse-test)
+  (let* ((parser (parse-if-expr))
+         (input (string->list "If55=22Then13Else55Fi"))
+     ;;    (input (string->list "If55=22Then13ElseABCFi"))
+     ;;    ABC and Fi get parsed together as one identifier.
+     ;;    Need to introduce whitespace?
+         (parse-tree '())
+         (parse-stream (make-parse-stream parse-tree input)))
+    (run-parser parser parse-stream)))
+
 
 
 (def (binary-exp-parse-test)
@@ -16,7 +72,7 @@
 
 
 (def (empty-parse-test)
-  (let* ((parser (parse-empty))
+  (let* ((parser (peek-empty))
          (input (string->list "a"))
          (parse-tree '())
          (parse-stream (make-parse-stream parse-tree input)))
@@ -44,9 +100,3 @@
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
 
-(def (string-parse-test)
-  (let* ((parser (parse-string "coolness"))
-         (input (string->list "\"coolness\""))
-         (parse-tree '())
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser parser parse-stream)))
