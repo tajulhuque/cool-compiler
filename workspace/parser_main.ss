@@ -1,12 +1,8 @@
-#!/usr/bin/env gxi
+(export main)
 
 (import "parser_library")
 (import "parse_types")
 
-(def (loadme)
-  ;; TODO: this doesn't quite reset environment it seems,
-  ;; need some kind of (reset-environment)...
-  (load "parser_main.ss"))
 
 (def (main . args)
  (if-exp-parse-test-keyword-ws2))
@@ -65,22 +61,6 @@ Fi "))  ;; WORKS!
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
 
-
-(def (peek-phrase-test2)
-  (let* ((peeker (peek-phrase2 "If"))
-         (input (string->list "If"))
-         (parse-tree '())
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser peeker parse-stream)))
-
-
-
-(def (peek-phrase-test)
-  (let* ((peeker (peek-phrase "If"))
-         (input (string->list "If"))
-         (parse-tree '())
-         (parse-stream (make-parse-stream parse-tree input)))
-    (run-parser peeker parse-stream)))
 
 
 (def (binary-exp-parse-test)
