@@ -20,7 +20,7 @@ Fi "))  ;; WORKS!
          (parse-stream (make-parse-stream parse-tree input)))
     (run-parser parser parse-stream)))
 
-(def (if-exp-parse-test-keyword-ws3) ;;BROKE! (not related to ws)
+(def (if-exp-parse-test-keyword-ws3) ;;BROKE! (not related to ws) when using single character variables ...Then x Else y
   (let* ((parser (parse-if-expr))
          (input (string->list " If gixmo=19 Then x Else y Fi "))
          (parse-tree '())

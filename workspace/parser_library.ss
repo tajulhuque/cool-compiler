@@ -14,7 +14,7 @@
 ;; Parser Runner ;;;;;;;;;
 ;;
 (def (run-parser parser stream)
-  (displayln "initial input stream: " (parse-stream-input-stream stream))
+  (displayln "initial input strea:: " (parse-stream-input-stream stream))
   (let (parse-result (parser stream))
     (match parse-result
       ((parse-stream parse-tree input-stream)
@@ -216,7 +216,8 @@
 (def (parse-integer)
   (def (parser stream)
     (displayln (string-append "running parse-integer"))
-    (let* ((digits-parser (parser-repeat (parse-digit)))
+    (let* ((digits-parser (parse-pipeline [(parse-digit)
+                                           (parser-repeat (parse-digit))]))
            (digits-parse-stream (make-parse-stream '() (parse-stream-input-stream stream)))
            (digits-parse-result (digits-parser digits-parse-stream)))
       (match digits-parse-result
@@ -344,32 +345,24 @@
       (foldl composer (car reversed-parsers) (cdr reversed-parsers))))
   combined-parser)
 
-;; parser-repeat - need to make parser parse
-;; over and over again until it finally fails,
-;; basically greedy-parse as much as it can.
-;; Should this be in the combinater style?
-;; Takes a parser and produces another parser?
-;; Probaby yes.
-;; Basically, need to run the supplied parser once, if that fails, return parse-fail.
-;; Otherwise, keep going as long as you can, returning until failure
-;; but in the "keep going phase" you don't return failure, you only stop at failure
+;; parser-repeat parses zero-or-more repetitions.
+;; It greedily keeps applying parser until parser fails, then returns the
+;; last successful stream. If parser does not match even once, this still
+;; succeeds and returns the original stream unchanged.
 (def (parser-repeat parser)
   (def (repeat-parser stream)
-
     (def (repeat-phase repeat-phase-stream)
       (let (repeat-phase-parse-result (parser repeat-phase-stream))
         (if (parse-fail? repeat-phase-parse-result)
           repeat-phase-stream
-          (let (repeat-phase-result-input (parse-stream-input-stream repeat-phase-parse-result))
-            (if (null? repeat-phase-result-input)
-              repeat-phase-parse-result
-              (repeat-phase repeat-phase-parse-result))))))
-
-
-    (let (parse-result (parser stream))
-      (if (parse-stream? parse-result)
-        (repeat-phase parse-result)
-        parse-result)))
+          (let ((repeat-phase-input (parse-stream-input-stream repeat-phase-stream))
+                (repeat-phase-result-input (parse-stream-input-stream repeat-phase-parse-result)))
+            (if (equal? repeat-phase-result-input repeat-phase-input)
+              repeat-phase-stream
+              (if (null? repeat-phase-result-input)
+                repeat-phase-parse-result
+                (repeat-phase repeat-phase-parse-result)))))))
+    (repeat-phase stream))
   repeat-parser)
 
 ;; todo: define a more-input? function
