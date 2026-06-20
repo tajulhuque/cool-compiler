@@ -10,18 +10,18 @@
 (export parse-keyword)
 
 (import "parse_types")
+(import "trace_utils")
 
 ;; Parser Runner ;;;;;;;;;
 ;;
 (def (run-parser parser stream)
-  (displayln "initial input strea:: " (parse-stream-input-stream stream))
   (let (parse-result (parser stream))
     (match parse-result
       ((parse-stream parse-tree input-stream)
        (begin
         (displayln "SUCCESSFUL PARSE")
-        (displayln "input stream after parse: " input-stream)
-        (displayln "parse tree result: " parse-tree)
+        (displayln "input stream after parse: " (char-list->trace-string input-stream))
+        (trace-write-line "parse tree result: " parse-tree)
        (displayln "")))
       ((parse-fail msg)
        (displayln "PARSE FAIL.  Error Message: ")
@@ -78,10 +78,6 @@
          ;;
          (on-success-node-builder (lambda (parse-sub-tree)
                                     (let ((raw-if-parts (reverse parse-sub-tree)))
-                                      (displayln "raw-if-parts:")
-                                      (displayln raw-if-parts)
-                                      (displayln "first one")
-                                      (displayln (list-ref raw-if-parts 0))
                                       (make-if-expr
                                        (list-ref raw-if-parts 1) ; predicate
                                        (list-ref raw-if-parts 3) ; consequent
@@ -185,22 +181,28 @@
 
 (def (make-parser name parser-builder on-success-node-builder on-failure-message)
   (def (new-parser stream)
-    (displayln (string-append "running " name))
-    (when (equal? name "parse-exp")
-      (displayln "on input: ")
-      (displayln (parse-stream-input-stream stream)))
-    (let* ((sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
+    (let ((input-before (parse-stream-input-stream stream)))
+      (trace-parser-enter name input-before)
+      (trace-push)
+      (let* ((sub-tree-stream (make-parse-stream '() input-before))
            (parser (parser-builder))
            (sub-tree-parse-result (parser sub-tree-stream)))
-      (match sub-tree-parse-result
-        ((parse-stream parse-tree input-stream) (begin (trace-msg (string-append name " success. Result:") sub-tree-parse-result)
-                                                       (make-parse-stream
-                                                        (cons
-                                                         (on-success-node-builder parse-tree)
-                                                         (parse-stream-parse-tree stream))
-                                                        input-stream)))
-        ((parse-fail msg) (make-parse-fail (string-append on-failure-message ": " msg)))
-        (else (make-parse-fail on-failure-message)))))
+        (trace-pop)
+        (match sub-tree-parse-result
+          ((parse-stream parse-tree input-stream)
+           (let (node (on-success-node-builder parse-tree))
+             (trace-parser-success name input-before input-stream parse-tree node)
+             (make-parse-stream
+              (cons node (parse-stream-parse-tree stream))
+              input-stream)))
+          ((parse-fail msg)
+           (let (failure-message (string-append on-failure-message ": " msg))
+             (trace-parser-fail name input-before failure-message)
+             (make-parse-fail failure-message)))
+          (else
+           (begin
+             (trace-parser-fail name input-before on-failure-message)
+             (make-parse-fail on-failure-message)))))))
   new-parser)
 
 
@@ -215,19 +217,16 @@
 
 (def (parse-integer)
   (def (parser stream)
-    (displayln (string-append "running parse-integer"))
     (let* ((digits-parser (parse-pipeline [(parse-digit)
                                            (parser-repeat (parse-digit))]))
            (digits-parse-stream (make-parse-stream '() (parse-stream-input-stream stream)))
            (digits-parse-result (digits-parser digits-parse-stream)))
       (match digits-parse-result
-        ((parse-stream parse-tree input-stream) (begin
-                                                  (trace-msg "parse-integer success. Result:" digits-parse-result)
-                                                  (make-parse-stream
-                                                   (cons
-                                                    (make-integer-expr (digit-list->number (reverse parse-tree)))
-                                                    (parse-stream-parse-tree stream))
-                                                   input-stream)))
+        ((parse-stream parse-tree input-stream) (make-parse-stream
+                                                 (cons
+                                                  (make-integer-expr (digit-list->number (reverse parse-tree)))
+                                                  (parse-stream-parse-tree stream))
+                                                 input-stream))
         (else (make-parse-fail "failed to parse integer")))))
   parser)
 

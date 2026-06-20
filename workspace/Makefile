@@ -1,7 +1,7 @@
 ENTRY=parser_main.ss
 EXE=parser
 
-SOURCES=parse_types.ss parser_library.ss parser_main.ss
+SOURCES=parse_types.ss trace_utils.ss parser_library.ss parser_main.ss
 
 .PHONY: run compile rebuild-run run-compiled clean
 

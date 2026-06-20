@@ -5,7 +5,7 @@
 
 
 (def (main . args)
- (if-exp-parse-test-keyword-ws2))
+ (if-exp-parse-test-keyword-ws3))
  ;; (parse-keyword-test))
  ;; (binary-exp-parse-test))
 
