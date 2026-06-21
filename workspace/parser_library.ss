@@ -8,6 +8,7 @@
 (export peek-empty)
 (export parse-ws)
 (export parse-keyword)
+(export trace-parser)
 
 (import "parse_types")
 (import "trace_utils")
@@ -43,36 +44,48 @@
   (list #\+ #\- #\* #\> #\< #\=))
 
 
-(def (parse-expression (greedy #t) (followed-by (peek-empty)))
+(def (parse-expression (greedy #t) (followed-by (peek-empty)) (follow-label #f))
   (let ((parser-builder (lambda ()
-                          (parse-any-of (if greedy
-                                          (list
-                                           (parse-terminal)
-                                           (parse-binary-exp (get-binary-operators)))
-                                          (list
-                                           (parse-pipeline (list (parse-terminal) followed-by))
-                                           (parse-binary-exp (get-binary-operators) #f followed-by))))))
+                          (trace-parser
+                           "expression alternatives"
+                           (parse-any-of (if greedy
+                                           (list
+                                            (parse-terminal)
+                                            (parse-binary-exp (get-binary-operators)))
+                                           (list
+                                            (parse-pipeline (list (parse-terminal) followed-by))
+                                            (parse-binary-exp (get-binary-operators) #f followed-by)))))))
         (on-success-node-builder  (lambda (parse-result-tree)
                                     (car parse-result-tree)))
         (on-fail-message "failed to parse expression"))
-    (make-parser "parse-exp" parser-builder on-success-node-builder on-fail-message)))
+    (make-parser
+     (if greedy
+       "parse-exp (eager)"
+       (if follow-label
+         (string-append "parse-exp (follow: " follow-label ")")
+         "parse-exp"))
+     parser-builder
+     on-success-node-builder
+     on-fail-message)))
 
 
-(def (parse-expression-followed-by parser)
-  (parse-expression #f parser))
+(def (parse-expression-followed-by parser label)
+  (parse-expression #f parser label))
 
 (def (parse-if-expr)
   (let* ((parser-builder (lambda ()
-                           (parse-pipeline
-                            [
-                             (parse-keyword "If")
-                             (parse-expression-followed-by (peek-keyword "Then"))
-                             (parse-keyword "Then")
-                             (parse-expression-followed-by (peek-keyword "Else"))
-                             (parse-keyword "Else")
-                             (parse-expression-followed-by (peek-keyword "Fi"))
-                             (parse-keyword "Fi")
-                             ])))
+                           (trace-parser
+                            "if-expression pipeline"
+                            (parse-pipeline
+                             [
+                              (parse-keyword "If")
+                              (parse-expression-followed-by (peek-keyword "Then") "Then")
+                              (parse-keyword "Then")
+                              (parse-expression-followed-by (peek-keyword "Else") "Else")
+                              (parse-keyword "Else")
+                              (parse-expression-followed-by (peek-keyword "Fi") "Fi")
+                              (parse-keyword "Fi")
+                              ]))))
 
          ;; Hmmm: how are we gonna do if expressions that don't have the alternate part?
          ;;
@@ -90,7 +103,10 @@
 
 
 (def (parse-terminal)
-  (let ((parser-builder (lambda () (parse-any-of [(parse-integer) (parse-identifier)])))
+  (let ((parser-builder (lambda ()
+                          (trace-parser
+                           "terminal alternatives"
+                           (parse-any-of [(parse-integer) (parse-identifier)]))))
         (on-success-node-builder  (lambda (terminal) terminal))
         (on-fail-message "failed to parse terminal"))
     (make-parser "parse-terminal" parser-builder on-success-node-builder on-fail-message)))
@@ -139,10 +155,12 @@
 
 (def (parse-binary-exp operators (greedy #t) (followed-by (peek-empty)))
   (let* ((parser-builder (lambda ()
-                           (parse-pipeline [
-                                            (parse-expression)
-                                            (parse-any-char operators)
-                                            (parse-expression greedy followed-by)])))
+                           (trace-parser
+                            "binary-expression pipeline"
+                            (parse-pipeline [
+                                             (parse-expression)
+                                             (parse-any-char operators)
+                                             (parse-expression greedy followed-by)]))))
          (on-success-node-builder (lambda (parse-sub-tree)
                                     (let ((left-operand (car (cdr (cdr parse-sub-tree))))
                                           (operator (car (cdr parse-sub-tree)))
@@ -243,19 +261,27 @@
 
 (def (parse-keyword str)
   (def (parser stream)
-    (let* ((str-chars (string->list str))
+    (let* ((input-before (parse-stream-input-stream stream))
+           (str-chars (string->list str))
            (characters-parser (parse-pipeline (map parse-char str-chars)))
            (keyword-parser (parse-pipeline (list (parse-ws) characters-parser (parse-ws)))) ;; keyword: require ws on each side
-           (sub-tree-stream (make-parse-stream '() (parse-stream-input-stream stream)))
-           (keyword-parser-result (keyword-parser sub-tree-stream)))
-      (match keyword-parser-result
-        ((parse-stream parse-tree input-stream) (make-parse-stream
-                                                 (cons
-                                                  (make-keyword (list->string (reverse parse-tree))) ;; TODO: strip out ws
-                                                  (parse-stream-parse-tree stream))
-                                                 input-stream))
-        ((parse-fail msg) (make-parse-fail (string-append "failed to parse keyword:" str " - Error: " msg)))
-        (else (make-parse-fail (string-append "failed to parse keyword:" str))))))
+           (sub-tree-stream (make-parse-stream '() input-before)))
+      (let (keyword-parser-result (keyword-parser sub-tree-stream))
+        (match keyword-parser-result
+          ((parse-stream parse-tree input-stream)
+           (let (node (make-keyword (list->string (reverse parse-tree)))) ;; TODO: strip out ws
+             (trace-note (string-append "parsed keyword: " str ", remaining: " (char-list->trace-string input-stream)))
+             (make-parse-stream
+              (cons node (parse-stream-parse-tree stream))
+              input-stream)))
+          ((parse-fail msg)
+           (let (failure-message (string-append "failed to parse keyword:" str " - Error: " msg))
+             (trace-note (string-append "keyword failed: " str " - " failure-message))
+             (make-parse-fail failure-message)))
+          (else
+           (let (failure-message (string-append "failed to parse keyword:" str))
+             (trace-note (string-append "keyword failed: " str " - " failure-message))
+             (make-parse-fail failure-message)))))))
   parser)
 
 ;; March, 2025:  Contemplating a "parse-keyword"
@@ -385,6 +411,29 @@
         first-result
         (parser2 stream))))
   parser)
+
+;; Opt-in tracing adapter for any parser-shaped function.
+;; Example: (trace-parser "ALT terminal" (parse-terminal))
+(def (trace-parser name parser)
+  (def (traced-parser stream)
+    (if (trace-combinators?)
+      (let ((input-before (parse-stream-input-stream stream)))
+        (trace-combinator-enter name input-before)
+        (trace-push)
+        (let (parse-result (parser stream))
+          (trace-pop)
+          (match parse-result
+            ((parse-stream parse-tree input-stream)
+             (begin
+               (trace-combinator-success name input-before input-stream "matched")
+               parse-result))
+            ((parse-fail msg)
+             (begin
+               (trace-combinator-fail name input-before msg)
+               parse-result))
+            (else parse-result))))
+      (parser stream)))
+  traced-parser)
 
 
 
