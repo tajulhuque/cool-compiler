@@ -234,19 +234,13 @@
   (parse-any-char (string->list "_$-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnophijklmnopqrstuvwxyz0123456789")))
 
 (def (parse-integer)
-  (def (parser stream)
-    (let* ((digits-parser (parse-pipeline [(parse-digit)
-                                           (parser-repeat (parse-digit))]))
-           (digits-parse-stream (make-parse-stream '() (parse-stream-input-stream stream)))
-           (digits-parse-result (digits-parser digits-parse-stream)))
-      (match digits-parse-result
-        ((parse-stream parse-tree input-stream) (make-parse-stream
-                                                 (cons
-                                                  (make-integer-expr (digit-list->number (reverse parse-tree)))
-                                                  (parse-stream-parse-tree stream))
-                                                 input-stream))
-        (else (make-parse-fail "failed to parse integer")))))
-  parser)
+  (let ((parser-builder (lambda ()
+                          (parse-pipeline [(parse-digit)
+                                           (parser-repeat (parse-digit))])))
+        (on-success-node-builder (lambda (parse-tree)
+                                   (make-integer-expr (digit-list->number (reverse parse-tree)))))
+        (on-fail-message "failed to parse integer"))
+    (make-parser "parse-integer" parser-builder on-success-node-builder on-fail-message)))
 
 
 
