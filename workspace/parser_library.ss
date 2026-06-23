@@ -69,8 +69,11 @@
      on-fail-message)))
 
 
-(def (parse-expression-followed-by parser label)
-  (parse-expression #f parser label))
+(def (parse-expression-followed-by parser)
+  (parse-expression #f parser))
+
+(def (parse-expression-followed-by-keyword keyword)
+  (parse-expression #f (peek-keyword keyword) keyword))
 
 (def (parse-if-expr)
   (let* ((parser-builder (lambda ()
@@ -79,11 +82,11 @@
                             (parse-pipeline
                              [
                               (parse-keyword "If")
-                              (parse-expression-followed-by (peek-keyword "Then") "Then")
+                              (parse-expression-followed-by-keyword "Then")
                               (parse-keyword "Then")
-                              (parse-expression-followed-by (peek-keyword "Else") "Else")
+                              (parse-expression-followed-by-keyword "Else")
                               (parse-keyword "Else")
-                              (parse-expression-followed-by (peek-keyword "Fi") "Fi")
+                              (parse-expression-followed-by-keyword "Fi")
                               (parse-keyword "Fi")
                               ]))))
 
